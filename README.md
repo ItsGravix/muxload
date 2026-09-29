@@ -4,7 +4,7 @@ Muxload is a JavaScript library for reliable, resumable, concurrent large-file u
 
 It is built to keep uploads moving on slow or unstable internet connections. Muxload adapts request sizes, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file. This makes it especially effective under stressful network conditions, while still allowing it to scale up and take advantage of available bandwidth when the connection is stable.
 
-It works with ordinary HTTP through Node.js, Express, serverless and Fetch-compatible runtimes, but the core scheduler is transport-neutral. You can replace the HTTP layer with your own API or in-process integration without changing Muxload's scheduling logic.
+**Express is not required.** Muxload works with ordinary HTTP through any Node.js server, serverless and Fetch-compatible runtimes, custom routers, or your own transport. Express is included only as the easiest complete example. The core scheduler is transport-neutral, so you can replace the HTTP layer with your own API or in-process integration without changing Muxload's scheduling logic.
 
 Muxload sends the original bytes. It does not compress, convert, base64-encode, or reduce file quality.
 
@@ -22,9 +22,11 @@ Pin a release in production:
 npm install github:ItsGravix/muxload#v0.8.0
 ```
 
-## Get started with Express
+## Optional quick start: Express
 
-You need two pieces: server code to receive and save files, and browser code to send the files the user selects. The examples below assume your website and Express API use the same origin.
+This section shows one ready-made setup for readers who already use Express. It is not required to use Muxload. For another server or infrastructure, go directly to the [custom server guide](docs/guides/custom-router.md), [Fetch and serverless guide](docs/guides/serverless-fetch.md), or [custom transport guide](docs/guides/custom-transport.md).
+
+The Express example needs two pieces: server code to receive and save files, and browser code to send the files the user selects. It assumes your website and Express API use the same origin.
 
 ### 1. Add uploads to your Express server
 
