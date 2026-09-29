@@ -47,8 +47,6 @@ app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
 // Parcelweave setup ends here.
 ```
 
-Both `createLocalStorage()` and `createExpressUploadRouter()` are Parcelweave code. The first tells Parcelweave where to save bytes; the second connects Parcelweave to your Express app.
-
 Here is the same setup as a complete server:
 
 ```js
