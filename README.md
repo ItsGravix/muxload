@@ -48,8 +48,6 @@ app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
 
 Here, `app` is your existing Express application. Muxload does not require accounts, users, sessions, or authentication. The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
-`app.use("/api/muxload", ...)` creates the upload routes under that URL. Muxload supplies the routes for starting uploads, receiving pieces, checking progress, completing uploads, and cancelling them. You do not need to write those routes yourself.
-
 ### 2. Send files from your browser
 
 Add a file picker to your page:
