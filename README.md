@@ -20,15 +20,25 @@ It uses ordinary `POST` requests. There are no WebSockets and no full-file copie
 
 ## Browser
 
+Install the latest code from the default GitHub branch:
+
+```bash
+npm install @itsgravix/muxload@github:ItsGravix/muxload
+```
+
+For repeatable production builds, pin a release instead:
+
+```bash
+npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.2.0
+```
+
+The unpinned command fetches the latest default branch when npm resolves the dependency. It does not automatically update an existing lockfile; run the install command again to update. A pinned tag is safer for applications.
+
 ```js
 import { createUploadClient } from "@itsgravix/muxload";
 
 const uploads = createUploadClient({
   endpoint: "/api/uploads",
-  // Optional one-time setup shared by simultaneous upload() calls.
-  prepare: () => fetch("/api/upload-session").then((response) => {
-    if (!response.ok) throw new Error("Uploads are unavailable.");
-  }),
 });
 
 const result = await uploads.upload(file, {
@@ -41,7 +51,37 @@ const result = await uploads.upload(file, {
 
 Call `upload()` again at any time. All calls share the same scheduler and new files join later batches.
 
-## Express server
+`endpoint` is the base URL of any HTTP service that implements the Muxload contract. It can be same-origin, an absolute URL on another domain, a serverless function gateway, a container, or another language entirely. Express is only the included reference adapter.
+
+For a cross-origin service or token-based authentication:
+
+```js
+const uploads = createUploadClient({
+  endpoint: "https://uploads.example.com/v1",
+  credentials: "include", // Send cross-origin cookies when the server permits it.
+  headers: async () => ({
+    Authorization: `Bearer ${await getAccessToken()}`,
+  }),
+});
+```
+
+Configure CORS on that service for your website's origin, methods, and headers. `prepare` is an optional application hook for one-time setup such as creating a cookie-backed session; Muxload itself does not require a separate session endpoint.
+
+## HTTP contract
+
+The client communicates with five ordinary HTTP routes beneath `endpoint`:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/uploads` | Create one logical upload and return its ID and confirmed offset. |
+| `POST` | `/batches` | Accept one bounded Muxload body containing pieces from one or more files. |
+| `GET` | `/status?ids=...` | Return confirmed offsets after an uncertain result. |
+| `POST` | `/uploads/:id/complete` | Validate and finalize a completely received file. |
+| `DELETE` | `/uploads/:id` | Cancel and clean up one logical upload. |
+
+The route names are an HTTP protocol contract, not a requirement to run a traditional public web server. A gateway can map them to functions, workers, object storage, queues, or any other backend. See `src/server.js` for the request validation and response shapes.
+
+## Optional Express adapter
 
 Muxload deliberately leaves storage, authentication, ownership, and final validation to the application:
 

@@ -19,11 +19,12 @@ function clampInteger(value, minimum, maximum, label) {
   return value;
 }
 
-function requestJson(method, url, { body, signal, headers, timeoutMs = 120_000 } = {}) {
+function requestJson(method, url, { body, signal, headers, credentials, timeoutMs = 120_000 } = {}) {
   return fetch(url, {
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
     headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
+    credentials,
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   }).then(async (response) => {
     const payload = await response.json().catch(() => ({}));
@@ -38,7 +39,7 @@ function requestJson(method, url, { body, signal, headers, timeoutMs = 120_000 }
   });
 }
 
-function xhrBatch(url, encoded, { onProgress, bodyStallMs, responseStallMs }) {
+function xhrBatch(url, encoded, { onProgress, bodyStallMs, responseStallMs, headers, credentials }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     let watchdog;
@@ -57,6 +58,8 @@ function xhrBatch(url, encoded, { onProgress, bodyStallMs, responseStallMs }) {
     };
 
     xhr.open("POST", url, true);
+    xhr.withCredentials = credentials === "include";
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, String(value));
     xhr.setRequestHeader("Content-Type", BATCH_CONTENT_TYPE);
     xhr.responseType = "json";
     xhr.timeout = 0;
@@ -114,6 +117,21 @@ export function createUploadClient(options = {}) {
   const fastRequestMs = options.fastRequestMs ?? 2_000;
   const growthSuccesses = options.growthSuccesses ?? 4;
   const concurrencySuccesses = options.concurrencySuccesses ?? 8;
+  const credentials = options.credentials ?? "same-origin";
+  if (!["omit", "same-origin", "include"].includes(credentials)) {
+    throw new TypeError('credentials must be "omit", "same-origin", or "include".');
+  }
+  const resolveHeaders = async () => {
+    const value = typeof options.headers === "function" ? await options.headers() : options.headers;
+    if (value === undefined) return {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("headers must be an object or a function returning one.");
+    return value;
+  };
+  const jsonRequest = async (method, url, requestOptions = {}) => requestJson(method, url, {
+    ...requestOptions,
+    credentials,
+    headers: { ...await resolveHeaders(), ...requestOptions.headers },
+  });
   const records = new Map();
   let cursor = 0;
   let activeRequests = 0;
@@ -182,7 +200,7 @@ export function createUploadClient(options = {}) {
   const reconcile = async (entries) => {
     const ids = entries.map((entry) => encodeURIComponent(entry.id)).join(",");
     try {
-      const payload = await requestJson("GET", `${endpoint}/status?ids=${ids}`, { timeoutMs: responseStallMs });
+      const payload = await jsonRequest("GET", `${endpoint}/status?ids=${ids}`, { timeoutMs: responseStallMs });
       for (const entry of entries) {
         const confirmed = payload.offsets?.[entry.id];
         if (Number.isSafeInteger(confirmed) && confirmed >= entry.record.offset && confirmed <= entry.record.size) {
@@ -201,7 +219,7 @@ export function createUploadClient(options = {}) {
     record.finishing = true;
     for (let attempt = 0; !record.cancelled; attempt += 1) {
       try {
-        const result = await requestJson("POST", `${endpoint}/uploads/${encodeURIComponent(record.id)}/complete`, {
+        const result = await jsonRequest("POST", `${endpoint}/uploads/${encodeURIComponent(record.id)}/complete`, {
           body: {}, timeoutMs: responseStallMs,
         });
         record.settled = true;
@@ -234,13 +252,16 @@ export function createUploadClient(options = {}) {
 
   const runBatch = async (entries) => {
     activeRequests += 1;
-    const encoded = encodeBatch(entries);
     const startedAt = performance.now();
     let succeeded = false;
     try {
+      const encoded = encodeBatch(entries);
+      const headers = await resolveHeaders();
       const result = await xhrBatch(`${endpoint}/batches`, encoded, {
         bodyStallMs,
         responseStallMs,
+        headers,
+        credentials,
         onProgress: (loaded) => distributeProgress(entries, loaded),
       });
       for (const entry of entries) {
@@ -303,7 +324,7 @@ export function createUploadClient(options = {}) {
     if (record.removing || record.settled || record.inFlight) return;
     record.removing = true;
     try {
-      if (record.id) await requestJson("DELETE", `${endpoint}/uploads/${encodeURIComponent(record.id)}`, { timeoutMs: responseStallMs });
+      if (record.id) await jsonRequest("DELETE", `${endpoint}/uploads/${encodeURIComponent(record.id)}`, { timeoutMs: responseStallMs });
     } catch {
       // Cancellation is local-first. Server cleanup may also expire abandoned sessions.
     } finally {
@@ -338,7 +359,7 @@ export function createUploadClient(options = {}) {
 
     try {
       await prepare();
-      const created = await requestJson("POST", `${endpoint}/uploads`, {
+      const created = await jsonRequest("POST", `${endpoint}/uploads`, {
         body: {
           name: file.name || "upload.bin",
           size: file.size,
