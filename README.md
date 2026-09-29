@@ -80,7 +80,7 @@ document.querySelector("#files").addEventListener("change", (event) => {
 
 `endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
 
-**IMPORTANT!** Use one upload client for all files. Muxload can only coordinate uploads that share a client. Separate clients still work, but their uploads compete for bandwidth.
+**IMPORTANT!** Use one upload client for all files. Muxload can only coordinate uploads that share a client. Separate clients still work, but their uploads compete for bandwidth and may fail on certain configurations.
 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
