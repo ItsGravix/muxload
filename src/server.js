@@ -82,7 +82,12 @@ export function createUploadService(options) {
 
     async batch(context, body) {
       const bytes = body instanceof Uint8Array ? body : new Uint8Array(body);
-      const decoded = decodeBatch(bytes, { maxEntries });
+      let decoded;
+      try { decoded = decodeBatch(bytes, { maxEntries }); }
+      catch (error) {
+        if (error instanceof TypeError) throw new UploadHttpError(400, error.message);
+        throw error;
+      }
       const payloadBytes = decoded.entries.reduce((sum, entry) => sum + entry.length, 0);
       if (payloadBytes > maxBatchBytes) throw new UploadHttpError(413, "Upload batch is too large.");
 

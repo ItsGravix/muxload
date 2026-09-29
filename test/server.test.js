@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import { once } from "node:events";
-import { createExpressUploadRouter, createFetchUploadHandler, UploadHttpError } from "../src/server.js";
+import { createExpressUploadRouter, createFetchUploadHandler, createUploadService, UploadHttpError } from "../src/server.js";
 import { encodeBatch } from "../src/protocol.js";
 
 async function fixture() {
@@ -121,4 +121,18 @@ test("portable Fetch handler owns routing, decoding, offsets and responses", asy
   }));
   assert.equal(completed.status, 200);
   assert.deepEqual(await completed.json(), { id: created.id, text: "hello" });
+});
+
+test("custom service reports malformed protocol bodies as public 400 errors", async () => {
+  const service = createUploadService({
+    async createUpload() {},
+    async resolveUpload() {},
+    async writePart() {},
+    async completeUpload() {},
+    async removeUpload() {},
+  });
+  await assert.rejects(
+    service.batch({}, new Uint8Array([1, 2, 3])),
+    (error) => error instanceof UploadHttpError && error.status === 400,
+  );
 });

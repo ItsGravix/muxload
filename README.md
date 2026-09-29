@@ -1,30 +1,42 @@
 # Muxload
 
-Muxload makes large browser uploads resumable and lets several files share bounded HTTP requests fairly. It uses normal HTTP—no WebSockets—and never changes or compresses file bytes.
+Muxload helps browsers upload large files over slow or unreliable connections.
 
-Muxload does **not** start or host a web server. It gives you:
+It can upload several files fairly, retry failed pieces, and continue from the last bytes confirmed by your server. It uses normal HTTP requests. It does not compress, convert, or change the files.
 
-- a browser upload client;
-- a portable upload engine for your existing backend;
-- optional adapters for common server styles.
+## The simple mental model
+
+Muxload has two sides:
+
+```text
+Browser client  →  your HTTP endpoint  →  your storage
+```
+
+- The **browser client** splits files into small pieces and sends them.
+- The **server engine** checks each piece and tracks where every file continues.
+- **Your application** decides who may upload and where the bytes are stored.
+
+Muxload does not create a website, open a port, or start a server. It plugs into the server or hosting platform you already use.
 
 ## Install
 
-Install the latest default branch:
+Install the newest code from GitHub:
 
 ```bash
 npm install @itsgravix/muxload@github:ItsGravix/muxload
 ```
 
-For a repeatable production build, pin a release:
+For production, pin a version so future changes cannot install unexpectedly:
 
 ```bash
-npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.4.0
+npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.4.1
 ```
 
-The unpinned command checks the latest branch when npm resolves the dependency. An existing lockfile does not update automatically.
+The unpinned command checks the newest default branch when npm resolves the dependency. A lockfile will keep its currently resolved commit until you update the dependency again.
 
-## Browser quick start
+## Browser setup
+
+Create one client and reuse it for every file on the page:
 
 ```js
 import { createUploadClient } from "@itsgravix/muxload";
@@ -41,37 +53,22 @@ const result = await uploads.upload(file, {
 });
 ```
 
-Use one client instance for the whole page. Every call to `upload()` joins the same fair scheduler, including files added after an upload has started.
+Calling `upload()` again adds another file to the same scheduler. A file selected later joins a later request; Muxload never tries to modify a request that is already being sent.
 
-The endpoint may also be on another domain:
+## Pick one server setup
 
-```js
-const uploads = createUploadClient({
-  endpoint: "https://uploads.example.com/v1",
-  credentials: "include",
-  headers: async () => ({
-    Authorization: `Bearer ${await getAccessToken()}`,
-  }),
-});
-```
+| Your situation | Use |
+| --- | --- |
+| You use Express and want Muxload to add its routes | `createExpressUploadRouter` |
+| Your platform accepts standard `Request` objects | `createFetchUploadHandler` |
+| You already have your own router or URL design | `createUploadService` |
+| Each route is a separate serverless function | `createUploadService` inside each function |
 
-Configure CORS on the remote service. The optional `prepare` callback can perform one-time application setup, but Muxload does not require a separate session endpoint.
+All three choices use the same upload engine. The difference is only how incoming HTTP requests reach it.
 
-## Choose a server integration
+## Option 1: Express router
 
-You provide five application-specific operations:
-
-- create an upload record and destination;
-- find an upload by ID and verify ownership;
-- write bytes at an offset;
-- finalize a completed upload;
-- remove a cancelled upload.
-
-Muxload handles the complicated parts around them: routes, request limits, binary decoding, offset validation, per-file locking, duplicate requests, resumable status responses, and error responses.
-
-### Option 1: Express
-
-Use this when the application already runs Express:
+This is the shortest server setup. Muxload creates an Express router, but your application still owns and starts Express.
 
 ```js
 import express from "express";
@@ -91,17 +88,21 @@ app.use("/api/muxload", createExpressUploadRouter({
 app.listen(3000);
 ```
 
-Muxload creates the routes inside the router. Your existing application still owns and starts the server.
+The browser endpoint and Express mount path must match:
 
-### Option 2: serverless or Fetch-compatible runtime
+```js
+createUploadClient({ endpoint: "/api/muxload" });
+```
 
-Use the standard `Request → Response` handler with Workers, functions, or Fetch-compatible servers:
+## Option 2: one Fetch-compatible handler
+
+Use this with a Worker, serverless gateway, or framework that works with standard Web API `Request` and `Response` objects:
 
 ```js
 import { createFetchUploadHandler } from "@itsgravix/muxload/server";
 
-const handleUpload = createFetchUploadHandler({
-  basePath: "/v1",
+const handleMuxload = createFetchUploadHandler({
+  basePath: "/uploads",
   createUpload,
   resolveUpload,
   writePart,
@@ -111,19 +112,34 @@ const handleUpload = createFetchUploadHandler({
 
 export default {
   fetch(request) {
-    return handleUpload(request);
+    return handleMuxload(request);
   },
 };
 ```
 
-Muxload does not open a port here. The hosting platform invokes the returned handler.
+This function does not start a server. Your platform calls it whenever a request arrives.
 
-### Option 3: custom server or custom routes
-
-Use the framework-neutral service inside an existing server:
+If the same application handles other URLs, route only the Muxload prefix to it:
 
 ```js
-import { createUploadService } from "@itsgravix/muxload/server";
+export default {
+  fetch(request) {
+    const path = new URL(request.url).pathname;
+    if (path.startsWith("/uploads/")) return handleMuxload(request);
+    return handleTheRestOfTheApplication(request);
+  },
+};
+```
+
+## Option 3: your own router
+
+Some applications cannot mount one router or send every upload route to one function. Use `createUploadService` to call the Muxload operations yourself.
+
+```js
+import {
+  createUploadService,
+  UploadHttpError,
+} from "@itsgravix/muxload/server";
 
 const mux = createUploadService({
   createUpload,
@@ -132,25 +148,55 @@ const mux = createUploadService({
   completeUpload,
   removeUpload,
 });
-
-customServer.post("/files/new", async (request, response) => {
-  response.json(await mux.create(request, request.body), 201);
-});
-
-customServer.post("/files/data", async (request, response) => {
-  response.json(await mux.batch(request, request.rawBody));
-});
 ```
 
-The remaining operations are:
+The service gives your router five methods:
 
 ```js
-await mux.status(context, ids);
-await mux.complete(context, uploadId);
-await mux.remove(context, uploadId);
+mux.create(context, specification);
+mux.batch(context, rawRequestBytes);
+mux.status(context, uploadIds);
+mux.complete(context, uploadId);
+mux.remove(context, uploadId);
 ```
 
-Tell the browser client about custom route names:
+`context` can be your request object, authenticated user, function context, or another value your callbacks need.
+
+### Example custom routes
+
+The exact router syntax will differ, but the mapping looks like this:
+
+```js
+router.post("/files/new", async (request, response) => {
+  const result = await mux.create(request, request.jsonBody);
+  response.status(201).json(result);
+});
+
+router.post("/files/data", async (request, response) => {
+  const result = await mux.batch(request, request.rawBody);
+  response.json(result);
+});
+
+router.get("/files/progress", async (request, response) => {
+  const ids = request.query.ids.split(",");
+  response.json(await mux.status(request, ids));
+});
+
+router.post("/files/:id/finish", async (request, response) => {
+  response.json(await mux.complete(request, request.params.id));
+});
+
+router.delete("/files/:id", async (request, response) => {
+  await mux.remove(request, request.params.id);
+  response.status(204).end();
+});
+```
+
+Important: the batch route must provide the **raw binary request body** to `mux.batch()`. Do not run that body through a JSON or text parser.
+
+### Tell the browser about custom routes
+
+The browser does not need the default route names:
 
 ```js
 const uploads = createUploadClient({
@@ -158,87 +204,161 @@ const uploads = createUploadClient({
   routes: {
     create: "files/new",
     batch: "files/data",
-    status: (ids) => `files/progress?ids=${ids.map(encodeURIComponent).join(",")}`,
-    complete: (id) => `files/${encodeURIComponent(id)}/finish`,
-    remove: (id) => `files/${encodeURIComponent(id)}`,
+    status: (ids) =>
+      `files/progress?ids=${ids.map(encodeURIComponent).join(",")}`,
+    complete: (id) =>
+      `files/${encodeURIComponent(id)}/finish`,
+    remove: (id) =>
+      `files/${encodeURIComponent(id)}`,
   },
 });
 ```
 
-Route values can be absolute URLs, so individual operations may live in different services or functions. Users do not need to fork Muxload to control routing or storage behavior.
+Each route may also be a complete URL. This allows different operations to live in separate functions or services:
 
-## Callback shape
+```js
+routes: {
+  create: "https://create.example.com/upload",
+  batch: "https://data.example.com/upload",
+  status: (ids) =>
+    `https://status.example.com/upload?ids=${ids.join(",")}`,
+  complete: (id) =>
+    `https://finish.example.com/upload/${id}`,
+  remove: (id) =>
+    `https://delete.example.com/upload/${id}`,
+}
+```
 
-The same callbacks work with every server integration:
+## Separate serverless functions
+
+If every HTTP route deploys as a different function, create the same service inside each function and call only the required method:
+
+```js
+// The function responsible for batch data.
+const mux = createUploadService(callbacks);
+
+export async function handleBatch(request) {
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  const result = await mux.batch(request, bytes);
+  return Response.json(result);
+}
+```
+
+In this setup, never depend on an in-memory `Map` for upload records. Separate invocations may run on different machines. Store upload IDs, sizes, owners, and confirmed offsets in durable storage such as a database, durable object, or transactional metadata store.
+
+Concurrent writes also need storage-level protection. Muxload prevents conflicting writes inside one running service instance, but it cannot lock two unrelated machines. Use conditional updates, transactions, object-store multipart rules, or another atomic storage mechanism.
+
+## What your five callbacks do
+
+Muxload handles the protocol. Your callbacks connect it to authentication and storage.
 
 ```js
 const callbacks = {
   async createUpload(context, specification) {
-    // Authenticate, enforce quotas, and create the destination.
-    return { id: "random-id", size: specification.size, offset: 0 };
+    // Authenticate, enforce limits, and create the destination.
+    return {
+      id: crypto.randomUUID(),
+      size: specification.size,
+      offset: 0,
+    };
   },
 
   async resolveUpload(context, id) {
-    // Authenticate and verify that this caller owns the ID.
-    return upload; // Must contain { id, size, offset }.
+    // Load the record and verify that this caller owns it.
+    return upload; // Must include { id, size, offset }.
   },
 
   async writePart(context, upload, bytes, offset) {
-    // Write these unchanged bytes at this exact offset.
+    // Write these unchanged bytes at this exact position.
   },
 
   async completeUpload(context, upload) {
-    // Validate, move, publish, or enqueue the completed file.
+    // Validate, move, publish, or enqueue the finished file.
     return { id: upload.id, complete: true };
   },
 
   async removeUpload(context, upload) {
-    // Remove temporary data and the upload record.
+    // Remove temporary bytes and the upload record.
   },
 };
 ```
 
-Throw `UploadHttpError` when an application error needs a specific public status and message:
+Muxload updates the returned upload object's `offset` after a successful write. If `resolveUpload` loads a fresh object from a database on every request, `writePart` must also persist the new confirmed offset atomically with the bytes.
+
+## Errors in a custom router
+
+The ready-made Express and Fetch adapters format errors for you. A custom router should catch `UploadHttpError`:
 
 ```js
-import { UploadHttpError } from "@itsgravix/muxload/server";
-
-throw new UploadHttpError(404, "Upload not found.");
+try {
+  response.json(await mux.complete(request, uploadId));
+} catch (error) {
+  if (error instanceof UploadHttpError) {
+    response.status(error.status).json({
+      error: error.message,
+      ...error.details,
+    });
+  } else {
+    console.error(error);
+    response.status(500).json({ error: "Upload failed." });
+  }
+}
 ```
 
-## How it works
+Do not return internal stack traces or storage errors to the browser.
 
-Muxload starts with small 128 KiB batches. One batch may contain pieces from several logical files. Successful fast requests allow the batch size and physical concurrency to grow; failures reduce them. Concurrent requests never contain pieces from the same file.
+## Cross-origin endpoints
 
-Every file keeps its own server-confirmed offset. After an uncertain failure, the client asks the server for current offsets and resends only unconfirmed bytes. Displayed progress never moves backward and stays below 100% until the server confirms completion.
+For an upload service on another domain:
 
-If 20 files cannot fit in one request, Muxload rotates through smaller groups over later requests. The browser works with bounded `Blob.slice()` pieces rather than copying complete files into JavaScript memory.
+```js
+const uploads = createUploadClient({
+  endpoint: "https://uploads.example.com/v1",
+  credentials: "include",
+  headers: async () => ({
+    Authorization: `Bearer ${await getAccessToken()}`,
+  }),
+});
+```
 
-## Default HTTP routes
+Configure CORS to allow your website's origin, the required methods, `Content-Type`, and any authentication headers. Handle `OPTIONS` preflight requests in your platform or router.
 
-The standard client, Fetch handler, and Express adapter use:
+## What Muxload handles
 
-| Method | Route | Purpose |
+- Fairly rotates through any number of logical files.
+- Keeps every physical request below a configured size.
+- Starts with conservative 128 KiB batches and adapts after successes or failures.
+- Keeps simultaneous physical requests away from the same logical file.
+- Tracks a separate confirmed offset for every file.
+- Reconciles offsets after uncertain failures.
+- Makes repeated confirmed pieces safe instead of duplicating bytes.
+- Reports XHR upload progress without allowing the visible percentage to move backward.
+- Uses bounded `Blob.slice()` pieces rather than copying complete files in JavaScript memory.
+
+## Default routes
+
+The ready-made client and adapters use these paths unless `routes` is configured:
+
+| Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/uploads` | Create a logical upload. |
-| `POST` | `/batches` | Send bounded pieces from one or more files. |
-| `GET` | `/status?ids=...` | Read confirmed offsets after an uncertain result. |
-| `POST` | `/uploads/:id/complete` | Finalize a fully received file. |
-| `DELETE` | `/uploads/:id` | Cancel and clean up one upload. |
-
-These are protocol defaults, not a requirement to run a traditional public web server.
+| `POST` | `/uploads` | Create an upload. |
+| `POST` | `/batches` | Send pieces from one or more files. |
+| `GET` | `/status?ids=...` | Read confirmed offsets. |
+| `POST` | `/uploads/:id/complete` | Finalize a complete file. |
+| `DELETE` | `/uploads/:id` | Cancel and remove an upload. |
 
 ## Production checklist
 
-- Authenticate every operation and bind each upload ID to its owner.
-- Generate storage paths server-side; never use a supplied filename as a path.
-- Apply rate, session-count, total-size, storage, and expiry limits.
+- Authenticate every operation.
+- Verify ownership whenever an upload ID is used.
+- Generate storage paths on the server; never trust a filename as a path.
+- Limit file sizes, active sessions, request rates, storage use, and session age.
+- Keep proxy and platform body limits above Muxload's maximum batch size.
+- Use durable metadata and atomic offset updates across multiple processes.
 - Inspect completed files before publishing or processing them.
-- Keep proxy and platform body limits above the configured maximum batch size.
-- Use durable upload records and storage when requests may reach different processes.
-- Configure CORS carefully for cross-origin endpoints.
+- Configure CORS narrowly when the upload endpoint is cross-origin.
 
-Muxload is a focused solution, not a replacement for tus, object-storage multipart uploads, or a managed upload service. Prefer those when they fit the application better.
+Muxload is a focused solution, not a replacement for tus, object-storage multipart uploads, or a managed upload service. Prefer those when they fit your application better.
 
 ## License
 
