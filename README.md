@@ -4,7 +4,7 @@ Muxload is a JavaScript library for reliable, resumable, concurrent large-file u
 
 It is built to keep uploads moving on slow or unstable internet connections. Muxload adapts request sizes, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file. This makes it especially effective under stressful network conditions, while still allowing it to scale up and take advantage of available bandwidth when the connection is stable.
 
-Muxload follows [Cloudflare's recommendation to break uploads into smaller chunks](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/4xx-client-error/error-413/) when a file cannot fit safely within one proxied request. The library applies that approach automatically while adding retry, resume, adaptive sizing, and coordination across concurrent files.
+Cloudflare [lists breaking uploads into smaller chunks](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/4xx-client-error/error-413/) as one way to handle files that cannot fit within a single proxied request. Muxload applies that approach automatically while adding retry, resume, adaptive sizing, and coordination across concurrent files.
 
 Muxload works with ordinary HTTP through any Node.js server, serverless and Fetch-compatible runtimes, custom routers, or your own transport. Express is included as the easiest complete example. The core scheduler is transport-neutral, so you can replace the HTTP layer with your own API or in-process integration without changing Muxload's scheduling logic.
 
