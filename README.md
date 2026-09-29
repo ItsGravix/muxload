@@ -10,7 +10,7 @@ Muxload sends the original bytes. It does not compress, convert, base64-encode, 
 
 A proxy or server may reject a single request above its body-size limit even when it can accept a much larger file over several requests. Muxload handles that difference directly: a 3 GB file can be transferred as a resumable sequence of requests whose individual bodies remain below your configured maximum.
 
-Muxload also keeps those requests moving on slow or unstable connections. It adapts their size, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file.
+Muxload also keeps those requests moving on slow or unstable connections. It adapts their size, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file. This makes it especially effective under stressful network conditions, while still allowing it to scale up and take advantage of available bandwidth when the connection is stable.
 
 This works with ordinary HTTP. It does not bypass or disable an infrastructure limit; it structures the upload so each request respects that limit.
 
