@@ -1,10 +1,18 @@
 # Muxload
 
-Muxload is a JavaScript library for reliable, resumable, concurrent large-file uploads. It multiplexes pieces from several files into bounded requests, reports real browser upload progress, retries interruptions, and resumes from server-confirmed offsets.
+Muxload is a JavaScript library for reliable, resumable, concurrent large-file uploads. It can upload files larger than your CDN, reverse proxy, or server's maximum request-body size by dividing each file across multiple bounded HTTP requests.
+
+Each request stays within the limit you configure. Muxload multiplexes pieces from several files, reports real browser upload progress, retries interruptions, and resumes from server-confirmed offsets without restarting the full upload.
 
 It works with ordinary HTTP through Node.js, Express, serverless and Fetch-compatible runtimes, but the core scheduler is transport-neutral. You can replace the HTTP layer with your own API or in-process integration without changing Muxload's scheduling logic.
 
 Muxload sends the original bytes. It does not compress, convert, base64-encode, or reduce file quality.
+
+## Upload beyond per-request limits
+
+A proxy or server may reject a single request above its body-size limit even when it can accept a much larger file over several requests. Muxload handles that difference directly: a 3 GB file can be transferred as a resumable sequence of requests whose individual bodies remain below your configured maximum.
+
+This works with ordinary HTTP. It does not bypass or disable an infrastructure limit; it structures the upload so each request respects that limit.
 
 ## Install
 
@@ -97,6 +105,7 @@ Choose the guide that matches your application:
 
 ## What Muxload handles
 
+- Files larger than a CDN, reverse proxy, or server's per-request body-size limit
 - Several files sharing bounded requests fairly, including files added later
 - Retry and resume from server-confirmed byte offsets
 - Upload progress that does not move backward
