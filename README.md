@@ -29,7 +29,7 @@ This section shows one ready-made setup if you use Express. It is not required t
 
 ### 1. Add uploads to your Express server
 
-If you already have an Express app, add the imports near the top of your server file, create the storage adapter, and mount the router.
+If you already have an Express app, add the imports near the top of your server file and mount the router. This quick start uses Parcelweave's optional local-disk adapter; you can replace it with your own storage functions.
 
 ```js
 import express from "express";
@@ -38,7 +38,7 @@ import express from "express";
 import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
-// Parcelweave setup starts here.
+// Parcelweave setup starts here. This local-disk adapter is optional.
 const storage = createLocalStorage({
   directory: "./uploads", // Where files are saved on the server.
 });
@@ -60,7 +60,7 @@ import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 const app = express();
 app.use(express.json());
 
-// Parcelweave setup starts here.
+// Parcelweave setup starts here. This local-disk adapter is optional.
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
@@ -88,7 +88,9 @@ app.listen(3000, () => {
 });
 ```
 
-Only `directory` is required. Parcelweave creates the upload directory when the first file arrives. You can omit `maxFileBytes`, `validate`, and `finalize` until you need them. Completed bytes are stored at `uploads/<upload-id>/data`; `finalize` is where you can move the file, start processing it, or return your own result.
+`directory` is required only when you choose `createLocalStorage()`. That adapter creates the directory when the first file arrives and stores completed bytes at `uploads/<upload-id>/data`. Its `maxFileBytes`, `validate`, and `finalize` options can be omitted.
+
+Parcelweave itself does not require a directory, local disk, or this adapter. You can pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router instead. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
 
 The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
