@@ -13,7 +13,7 @@ npm install @itsgravix/muxload@github:ItsGravix/muxload
 Pinned version for production:
 
 ```bash
-npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.4.2
+npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.5.0
 ```
 
 ## Browser
@@ -52,22 +52,32 @@ Choose the example that matches your project:
 ```js
 import express from "express";
 import { createExpressUploadRouter } from "@itsgravix/muxload/server";
+import { createLocalStorage } from "@itsgravix/muxload/storage";
 
 const app = express();
 
+const storage = createLocalStorage({
+  directory: "./uploads",
+  // Run your authentication middleware before the upload router.
+  owner: (request) => request.user?.id,
+  maxFileBytes: 2 * 1024 ** 3,
+});
+
 app.use("/api/muxload", createExpressUploadRouter({
   express,
-  createUpload,
-  resolveUpload,
-  writePart,
-  completeUpload,
-  removeUpload,
+  storage,
 }));
 
 app.listen(3000);
 ```
 
 The router creates all required Muxload routes. Your application still controls the server, authentication, and storage.
+
+The disk adapter creates files, stores upload records, verifies ownership, writes pieces, and records completion. Files are saved as `uploads/<id>/data`; the original filename is kept in the record. Use one service instance per directory in a single Node.js process. This adapter requires a persistent local filesystem.
+
+Optional `validate(context, specification)` and `finalize(context, upload)` hooks let you check a file before accepting it and process it after completion. `finalize` receives `upload.path`; its JSON-compatible return value is returned to the browser. Make external effects in this hook idempotent: a crash before the result is saved can cause it to run again. Completed files stay on disk until your application removes them; schedule cleanup for abandoned uploads.
+
+All server integrations accept `{ storage }`. You can supply your own adapter or override any individual callback alongside it.
 
 ### Serverless or Fetch
 
@@ -152,6 +162,8 @@ Route values can also be complete URLs. This lets each operation use a different
 
 ## Storage callbacks
 
+You only need these when using custom storage. The local-disk adapter implements them for you.
+
 Every server option uses the same five callbacks:
 
 | Callback | What your code does |
@@ -193,6 +205,45 @@ const uploads = createUploadClient({
 ```
 
 Allow your website's origin, HTTP methods, `Content-Type`, and authentication headers in the upload service's CORS settings.
+
+## Use your own sending code
+
+No endpoint is required when you supply a transport. A transport is an object with five methods that send data using your own API, RPC client, or in-process service:
+
+```js
+const uploads = createUploadClient({
+  transport: {
+    create: (specification, { signal }) => myApi.create(specification, signal),
+    batch: (pieces, { onProgress }) => myApi.sendPieces(pieces, onProgress),
+    status: (ids) => myApi.status(ids),
+    complete: (id) => myApi.complete(id),
+    remove: (id) => myApi.remove(id),
+  },
+});
+```
+
+Each method returns a promise. `create` returns `{ id, offset }`. `batch` receives an array of `{ id, offset, length, blob }` pieces and returns `{ offsets: { [id]: savedBytes } }`; `status` returns the same offset shape. `complete` returns your result, and `remove` needs no result. Progress is cumulative payload bytes for the current batch, in piece order, excluding headers. Muxload still handles scheduling and retry decisions.
+
+Throw `new UploadError(message, { retryable: true })` from `@itsgravix/muxload` for temporary failures. Other errors stop the affected uploads. Custom transports must settle every operation, including failures and stalls; the default HTTP transport supplies its own watchdogs. Sending unchanged pieces to the server engine is easy with `encodeBatch(pieces)` from `@itsgravix/muxload/protocol`.
+
+To customize just one HTTP operation, wrap the built-in transport:
+
+```js
+import { createHttpTransport, createUploadClient } from "@itsgravix/muxload";
+
+const http = createHttpTransport({ endpoint: "/api/muxload" });
+const uploads = createUploadClient({
+  transport: { ...http, complete: (id) => myApi.finish(id) },
+});
+```
+
+## Pause, resume, cancel, and events
+
+`onProgress` includes the upload `id`. Use it with `uploads.pause(id)`, `uploads.resume(id)`, or `uploads.cancel(id)`. Pause waits for the current batch to settle so other files in that batch can continue. Finalization cannot be paused. Resume keeps the file and its confirmed offset in the current client; this does not restore a browser session after a page reload.
+
+You can also pass an `AbortSignal` to `upload(file, { signal })` to cancel that file. Cancellation leaves shared requests intact and rejects the upload promise with `AbortError` after cleanup is attempted.
+
+Set `onEvent(event)` on the client to observe `created`, `retry`, `error`, `paused`, `resumed`, `cancelled`, and `complete` events. Events contain the upload ID and, where applicable, the error or completion result.
 
 ## What Muxload handles
 

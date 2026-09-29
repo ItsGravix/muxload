@@ -62,7 +62,8 @@ function validateSpecification(specification) {
  * callbacks; Muxload owns validation, locking, offsets and retry semantics.
  */
 export function createUploadService(options) {
-  const { createUpload, resolveUpload, writePart, completeUpload, removeUpload } = options;
+  const callbacks = { ...options.storage, ...options };
+  const { createUpload, resolveUpload, writePart, completeUpload, removeUpload } = callbacks;
   for (const [name, value] of Object.entries({ createUpload, resolveUpload, writePart, completeUpload, removeUpload })) {
     if (typeof value !== "function") throw new TypeError(`${name} must be a function.`);
   }

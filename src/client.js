@@ -104,7 +104,7 @@ function retryDelay(attempt, delays) {
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export function createUploadClient(options = {}) {
+export function createHttpTransport(options = {}) {
   const endpoint = String(options.endpoint || "/api/mux-upload").replace(/\/$/, "");
   const configuredRoutes = options.routes ?? {};
   if (!configuredRoutes || typeof configuredRoutes !== "object" || Array.isArray(configuredRoutes)) {
@@ -125,32 +125,42 @@ export function createUploadClient(options = {}) {
     if (typeof path !== "string" || !path) throw new TypeError(`routes.${name} must resolve to a URL string.`);
     return /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? path : `${endpoint}/${path.replace(/^\/+/, "")}`;
   };
+  const responseStallMs = options.responseStallMs ?? 120_000;
+  const headers = async () => typeof options.headers === "function" ? await options.headers() : options.headers ?? {};
+  const json = async (method, name, value, body, signal) => {
+    try {
+      return await requestJson(method, route(name, value), { body, signal, headers: await headers(), credentials: options.credentials, timeoutMs: responseStallMs });
+    } catch (error) {
+      if (error instanceof UploadError || signal?.aborted) throw error;
+      throw new UploadError("Upload connection failed.", { retryable: true, cause: error });
+    }
+  };
+  return {
+    create: (spec, { signal } = {}) => json("POST", "create", null, spec, signal),
+    async batch(entries, { onProgress }) {
+      return xhrBatch(route("batch"), encodeBatch(entries), { onProgress, headers: await headers(), credentials: options.credentials, bodyStallMs: options.bodyStallMs ?? 600_000, responseStallMs });
+    },
+    status: (ids) => json("GET", "status", ids),
+    complete: (id) => json("POST", "complete", id, {}),
+    remove: (id) => json("DELETE", "remove", id),
+  };
+}
+
+export function createUploadClient(options = {}) {
+  const transport = options.transport ?? createHttpTransport(options);
+  for (const method of ["create", "batch", "status", "complete", "remove"]) {
+    if (typeof transport[method] !== "function") throw new TypeError(`transport.${method} must be a function.`);
+  }
+  const event = (type, record, extra = {}) => { try { options.onEvent?.({ type, id: record?.id, ...extra }); } catch {} };
   const minBatchBytes = clampInteger(options.minBatchBytes ?? 128 * KiB, 16 * KiB, 100 * MiB, "minBatchBytes");
   const maxBatchBytes = clampInteger(options.maxBatchBytes ?? 4 * MiB, minBatchBytes, 100 * MiB, "maxBatchBytes");
   const minPartBytes = clampInteger(options.minPartBytes ?? 16 * KiB, 1024, minBatchBytes, "minPartBytes");
   const maxFilesPerBatch = clampInteger(options.maxFilesPerBatch ?? 8, 1, 64, "maxFilesPerBatch");
   const maxConcurrentRequests = clampInteger(options.maxConcurrentRequests ?? 3, 1, 8, "maxConcurrentRequests");
   const retryDelays = options.retryDelays ?? [500, 1_000, 2_000, 5_000, 10_000, 20_000];
-  const bodyStallMs = options.bodyStallMs ?? 10 * 60_000;
-  const responseStallMs = options.responseStallMs ?? 2 * 60_000;
   const fastRequestMs = options.fastRequestMs ?? 2_000;
   const growthSuccesses = options.growthSuccesses ?? 4;
   const concurrencySuccesses = options.concurrencySuccesses ?? 8;
-  const credentials = options.credentials ?? "same-origin";
-  if (!["omit", "same-origin", "include"].includes(credentials)) {
-    throw new TypeError('credentials must be "omit", "same-origin", or "include".');
-  }
-  const resolveHeaders = async () => {
-    const value = typeof options.headers === "function" ? await options.headers() : options.headers;
-    if (value === undefined) return {};
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("headers must be an object or a function returning one.");
-    return value;
-  };
-  const jsonRequest = async (method, url, requestOptions = {}) => requestJson(method, url, {
-    ...requestOptions,
-    credentials,
-    headers: { ...await resolveHeaders(), ...requestOptions.headers },
-  });
   const records = new Map();
   let cursor = 0;
   let activeRequests = 0;
@@ -172,7 +182,7 @@ export function createUploadClient(options = {}) {
   const emit = (record, sent, state = "uploading") => {
     const safeSent = Math.max(record.displayed, Math.min(record.size, sent));
     record.displayed = state === "complete" ? record.size : Math.min(safeSent, Math.max(0, record.size - 1));
-    record.onProgress?.({
+    try { record.onProgress?.({
       id: record.id,
       file: record.file,
       bytesUploaded: record.displayed,
@@ -180,11 +190,11 @@ export function createUploadClient(options = {}) {
       totalBytes: record.size,
       percentage: record.size ? Math.floor((record.displayed / record.size) * 100) : 100,
       state,
-    });
+    }); } catch {}
   };
 
   const readyRecords = () => [...records.values()].filter((record) =>
-    !record.inFlight && !record.finishing && !record.cancelled && !record.settled && record.offset < record.size);
+    !record.paused && !record.inFlight && !record.finishing && !record.cancelled && !record.settled && record.offset < record.size);
 
   const buildBatch = () => {
     const ready = readyRecords();
@@ -219,7 +229,7 @@ export function createUploadClient(options = {}) {
   const reconcile = async (entries) => {
     const ids = entries.map((entry) => entry.id);
     try {
-      const payload = await jsonRequest("GET", route("status", ids), { timeoutMs: responseStallMs });
+      const payload = await transport.status(ids);
       for (const entry of entries) {
         const confirmed = payload.offsets?.[entry.id];
         if (Number.isSafeInteger(confirmed) && confirmed >= entry.record.offset && confirmed <= entry.record.size) {
@@ -234,27 +244,29 @@ export function createUploadClient(options = {}) {
   };
 
   const finishRecord = async (record) => {
-    if (record.finishing || record.settled || record.cancelled || record.offset !== record.size) return;
+    if (record.finishing || record.settled || record.cancelled || record.paused || record.offset !== record.size) return;
     record.finishing = true;
     for (let attempt = 0; !record.cancelled; attempt += 1) {
       try {
-        const result = await jsonRequest("POST", route("complete", record.id), {
-          body: {}, timeoutMs: responseStallMs,
-        });
+        const result = await transport.complete(record.id);
+        if (record.cancelled) return;
         record.settled = true;
         record.finishing = false;
         records.delete(record.localId);
         emit(record, record.size, "complete");
         record.resolve(result);
+        event("complete", record, { result });
         return;
       } catch (error) {
         if (!error.retryable) {
+          event("error", record, { error });
           record.settled = true;
           record.finishing = false;
           records.delete(record.localId);
           record.reject(error);
           return;
         }
+        event("retry", record, { error });
         await wait(retryDelay(attempt, retryDelays));
       }
     }
@@ -274,13 +286,7 @@ export function createUploadClient(options = {}) {
     const startedAt = performance.now();
     let succeeded = false;
     try {
-      const encoded = encodeBatch(entries);
-      const headers = await resolveHeaders();
-      const result = await xhrBatch(route("batch"), encoded, {
-        bodyStallMs,
-        responseStallMs,
-        headers,
-        credentials,
+      const result = await transport.batch(entries.map(({ id, offset, length, blob }) => ({ id, offset, length, blob })), {
         onProgress: (loaded) => distributeProgress(entries, loaded),
       });
       for (const entry of entries) {
@@ -303,6 +309,7 @@ export function createUploadClient(options = {}) {
         fastSuccesses = 0;
       }
     } catch (error) {
+      for (const entry of entries) event(error.retryable ? "retry" : "error", entry.record, { error });
       await reconcile(entries);
       currentBatchBytes = Math.max(minBatchBytes, Math.floor(currentBatchBytes / 2));
       currentConcurrency = Math.max(1, currentConcurrency - 1);
@@ -325,7 +332,7 @@ export function createUploadClient(options = {}) {
       activeRequests -= 1;
       for (const entry of entries) {
         if (entry.record.cancelled) void removeRecord(entry.record);
-        else if (succeeded) void finishRecord(entry.record);
+        else void finishRecord(entry.record);
       }
       schedulePump();
     }
@@ -343,7 +350,7 @@ export function createUploadClient(options = {}) {
     if (record.removing || record.settled || record.inFlight) return;
     record.removing = true;
     try {
-      if (record.id) await jsonRequest("DELETE", route("remove", record.id), { timeoutMs: responseStallMs });
+      if (record.id) await transport.remove(record.id);
     } catch {
       // Cancellation is local-first. Server cleanup may also expire abandoned sessions.
     } finally {
@@ -364,6 +371,7 @@ export function createUploadClient(options = {}) {
       resolve = resolvePromise;
       reject = rejectPromise;
     });
+    done.catch(() => {});
     const record = {
       localId, file, size: file.size, metadata, onProgress, resolve, reject,
       id: null, offset: 0, displayed: 0, attempt: 0, inFlight: false,
@@ -372,25 +380,23 @@ export function createUploadClient(options = {}) {
 
     const abort = () => {
       record.cancelled = true;
-      if (!record.inFlight) void removeRecord(record);
+      if (record.id && !record.inFlight) void removeRecord(record);
     };
     signal?.addEventListener("abort", abort, { once: true });
 
     try {
       await prepare();
-      const created = await jsonRequest("POST", route("create"), {
-        body: {
+      const created = await transport.create({
           name: file.name || "upload.bin",
           size: file.size,
           type: file.type || "application/octet-stream",
           metadata,
-        },
-        signal,
-        timeoutMs: responseStallMs,
-      });
+      }, { signal });
       record.id = created.id;
       record.offset = created.offset ?? 0;
       records.set(localId, record);
+      event("created", record);
+      if (record.cancelled) { void removeRecord(record); return await done; }
       emit(record, record.offset, "queued");
       if (record.size === 0) void finishRecord(record);
       else schedulePump();
@@ -402,6 +408,30 @@ export function createUploadClient(options = {}) {
 
   return {
     upload,
+    pause(id) {
+      const record = [...records.values()].find((item) => item.id === id);
+      if (!record || record.finishing) return false;
+      record.paused = true;
+      event("paused", record);
+      return true;
+    },
+    resume(id) {
+      const record = [...records.values()].find((item) => item.id === id);
+      if (!record || record.cancelled) return false;
+      record.paused = false;
+      event("resumed", record);
+      void finishRecord(record);
+      schedulePump();
+      return true;
+    },
+    cancel(id) {
+      const record = [...records.values()].find((item) => item.id === id);
+      if (!record) return false;
+      record.cancelled = true;
+      event("cancelled", record);
+      void removeRecord(record);
+      return true;
+    },
     getState() {
       return {
         activeUploads: records.size,
