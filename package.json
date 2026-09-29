@@ -1,7 +1,7 @@
 {
   "name": "@itsgravix/muxload",
   "version": "0.6.0",
-  "description": "Resumable JavaScript uploads for files larger than CDN, reverse-proxy, or server request-body limits, with concurrent scheduling and real progress.",
+  "description": "Resumable JavaScript uploads for large files, slow connections, and CDN or server request-body limits, with retries and real progress.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -44,6 +44,8 @@
     "upload",
     "resumable",
     "resumable-upload",
+    "slow-connection",
+    "unreliable-network",
     "multipart",
     "multiplexing",
     "file-transfer",

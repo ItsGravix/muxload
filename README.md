@@ -6,9 +6,11 @@ It works with ordinary HTTP through Node.js, Express, serverless and Fetch-compa
 
 Muxload sends the original bytes. It does not compress, convert, base64-encode, or reduce file quality.
 
-## Upload beyond per-request limits
+## Large files on slow connections
 
 A proxy or server may reject a single request above its body-size limit even when it can accept a much larger file over several requests. Muxload handles that difference directly: a 3 GB file can be transferred as a resumable sequence of requests whose individual bodies remain below your configured maximum.
+
+Muxload also keeps those requests moving on slow or unstable connections. It adapts their size, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file.
 
 This works with ordinary HTTP. It does not bypass or disable an infrastructure limit; it structures the upload so each request respects that limit.
 
@@ -104,6 +106,7 @@ Choose the guide that matches your application:
 ## What Muxload handles
 
 - Files larger than a CDN, reverse proxy, or server's per-request body-size limit
+- Slow or unstable connections through adaptive request sizes, retry, and confirmed-offset resume
 - Several files sharing bounded requests fairly, including files added later
 - Retry and resume from server-confirmed byte offsets
 - Upload progress that does not move backward
