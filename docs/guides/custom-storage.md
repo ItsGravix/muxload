@@ -1,90 +1,74 @@
-# Choose where uploaded bytes go
+# Handle bytes and completed uploads yourself
 
-Muxload does not require a folder. Pass a storage adapter to the Express router, Fetch handler, or upload service. Your browser code stays the same.
+Supply functions directly to Muxload. You control what happens to each byte range and to the completed file; no folder, memory adapter, or Muxload storage implementation is required.
 
-## Keep files in memory
+## Express example
 
 ```js
-import { createMemoryStorage } from '@itsgravix/muxload/memory-storage';
 import { createExpressUploadRouter } from '@itsgravix/muxload/server';
 
-const storage = createMemoryStorage({
-  owner: (request) => request.user?.id,
-  maxFileBytes: 8 * 1024 ** 2,
-  maxTotalBytes: 32 * 1024 ** 2,
-  maxUploads: 20,
-  validate: async (request, specification) => {
-    // Check metadata or application permissions before allocating memory.
-  },
-  finalize: async (request, upload) => {
-    // upload.bytes is the complete file as a Uint8Array.
-    const assetId = await yourProcessor.accept(upload.bytes);
-    return { assetId }; // JSON-compatible result returned to the browser.
-  },
-});
-
-app.use('/api/muxload', createExpressUploadRouter({ express, storage }));
-```
-
-`yourProcessor` is your application code. No file is written to disk by this adapter. It reserves one buffer per file and writes incoming pieces into their positions; `finalize` receives that same buffer. Treat it as read-only and copy it yourself only if your processor needs to mutate it.
-
-The default limits are 16 MiB per file, 64 MiB of retained file buffers, and 100 upload records. These limits do not include incoming request buffers, application processing, or other runtime memory. Completed uploads stay available until removed so completion retries return the same result. Remove expired uploads through `storage.removeUpload(context, { id })` after clients no longer need them, and coordinate cleanup with active requests. Holding a reference to `upload.bytes` in your own code keeps that memory alive even after removal.
-
-Use one upload service per adapter instance. Memory storage is temporary: server restarts lose uploads and confirmed offsets. Separate processes do not share it. For large files or persistent resume, use disk or your own persistent storage.
-
-## Use your own filesystem, database, or byte handler
-
-Implement these five functions and pass the object as `storage`:
-
-```js
-const storage = {
-  async createUpload(context, specification) {
-    // Authenticate, enforce limits, create storage and persist a record.
-    // Return { id, size, offset: 0, ...yourFields }.
-  },
-  async resolveUpload(context, id) {
-    // Load the current record and verify the caller owns it.
-    // Return { id, size, offset, ...yourFields } or throw UploadHttpError.
-  },
-  async writePart(context, upload, bytes, offset) {
-    // bytes is a Uint8Array of unchanged file data.
-    // Write at offset, then persist offset + bytes.length as confirmed.
-    // Resolve only once that range is safely stored.
-  },
-  async completeUpload(context, upload) {
-    // Read/process the completed file, notify your backend, or publish it.
-    // Persist and return a JSON-compatible result, e.g. { assetId }.
-  },
-  async removeUpload(context, upload) {
-    // Remove temporary data and its upload record.
-  },
-};
-
-app.use('/api/muxload', createExpressUploadRouter({ express, storage }));
-```
-
-These are callback templates: supply your storage implementation inside each function. The `context` is the Express request for this router. Fetch integrations use their configured context (the Request by default); direct service calls use whatever context you pass.
-
-Muxload checks incoming offsets, skips already-confirmed pieces, and serializes operations for each file within one service instance. Your `resolveUpload` must return the offset persisted by `writePart`; changing an in-memory argument alone does not persist it. Store bytes before confirming them. If writing bytes succeeds but saving the offset fails, replaying the same range must be safe. Multiple processes require shared locking or transactional offset checks in your storage.
-
-Keep `completeUpload` safe to retry, especially when notifying another backend. Use the upload ID as an idempotency key. Preserve its saved result for repeated completion calls.
-
-You can process each piece inside `writePart`, but a one-way consumer that cannot remember confirmed offsets or tolerate replay cannot provide resumable uploads by itself. Retain enough bytes or processing state to recover after an interruption. If retaining a piece after the callback returns, copy just that piece with `bytes.slice()` to avoid retaining the entire request buffer.
-
-## Override only one callback
-
-All three server integrations accept callback overrides alongside `storage`:
-
-```js
-const router = createExpressUploadRouter({
+app.use('/api/muxload', createExpressUploadRouter({
   express,
-  storage,
-  async completeUpload(context, upload) {
-    const result = await storage.completeUpload(context, upload);
-    await notifyBackendOnce(upload.id, result);
-    return result;
+  async createUpload(request, specification) {
+    return yourUploads.start(request.user.id, specification);
   },
-});
+  async resolveUpload(request, id) {
+    return yourUploads.findOwned(request.user.id, id);
+  },
+  async writePart(request, upload, bytes, offset) {
+    // The actual bytes, as a Uint8Array, and their position in the file.
+    await yourUploads.acceptBytes(upload.id, bytes, offset);
+  },
+  async completeUpload(request, upload) {
+    // Return your application's result to the browser.
+    return yourUploads.finish(upload.id);
+  },
+  async removeUpload(request, upload) {
+    await yourUploads.cancel(upload.id);
+  },
+}));
 ```
 
-`notifyBackendOnce` is your own retry-safe notification function. For disk and memory adapters, prefer their `validate` and `finalize` hooks when those cover your needs. Use full callback overrides when you need to control the storage lifecycle yourself.
+`yourUploads` stands for your own functions or service. Replace those calls with your implementation. Authentication middleware supplies `request.user` before the router runs. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse.
+
+## What each function receives and returns
+
+| Function | Your responsibility |
+| --- | --- |
+| `createUpload(context, specification)` | Authenticate, enforce limits, and create a record. Return `{ id, size, offset: 0, ...yourFields }`. The specification contains `name`, `size`, and `metadata`. |
+| `resolveUpload(context, id)` | Verify ownership and return the latest record, including its confirmed `offset`. Throw if it is unavailable. |
+| `writePart(context, upload, bytes, offset)` | Accept the byte range and record the new confirmed offset. Resolve only after your destination has accepted the data to the durability level your application promises. |
+| `completeUpload(context, upload)` | Finish your processing and return a JSON-compatible result, such as `{ assetId }`. Preserve the result so retries do not repeat side effects. |
+| `removeUpload(context, upload)` | Release your resources and remove the upload record. |
+
+The context is the Express request, the Fetch handler's supplied context (the Request by default), or whatever you pass to the standalone service. Records can include your own fields, such as a destination key or processing job ID. Muxload does not assemble a complete file object for a custom handler: your completion function retrieves bytes or a stream from the destination you chose.
+
+## Send pieces to your own stream
+
+For a Node.js Writable, you can await its write callback inside `writePart`:
+
+```js
+async function writePart(context, upload, bytes, offset) {
+  // Your code selects a destination positioned at this confirmed offset.
+  const destination = await yourUploads.writableAt(upload.id, offset);
+  await new Promise((resolve, reject) => {
+    destination.write(bytes, (error) => error ? reject(error) : resolve());
+  });
+  // Perform any flush/commit your destination needs before acknowledging.
+  await yourUploads.confirm(upload.id, offset + bytes.byteLength);
+}
+```
+
+The destination's owner must handle its stream errors and lifecycle. A write callback means the stream handled the piece; it does not necessarily mean the bytes are durable. Your completion handler can close the stream and finish processing. For a Web WritableStream, use your own writer and await `writer.write(bytes)` before confirming the offset.
+
+These are piece callbacks, not a live stream of the incoming HTTP body. The built-in HTTP handlers currently read and decode a bounded batch before calling `writePart`. They do not buffer the entire file. You can feed those pieces into your own stream without concatenating the full file.
+
+## Keep retries correct
+
+Muxload skips already-confirmed pieces and serializes writes to each file within one service instance. Your `resolveUpload` must return the offset saved by `writePart`. If data was written but recording the offset failed, the same range can arrive again: make replay safe. An append-only stream without recovery or offset tracking is insufficient for resumable uploads.
+
+Keep confirmed state across requests, and across restarts if you promise persistent resume. Multiple processes need shared locking or transactional offset checks. Muxload's locks apply only inside one service instance.
+
+Do not retain the incoming `bytes` view unnecessarily: it shares the batch's buffer. If you need a long-lived copy, `bytes.slice()` copies just that piece. Await processing before returning so failed writes are not acknowledged as successful.
+
+You may override any one callback alongside an existing `storage` adapter. For example, override `completeUpload` to notify another backend. Make that notification safe to repeat using the upload ID as an idempotency key.

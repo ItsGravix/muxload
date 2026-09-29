@@ -1,6 +1,6 @@
 {
   "name": "@itsgravix/muxload",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Resumable JavaScript uploads for large files, slow connections, and CDN or server request-body limits, with retries and real progress.",
   "type": "module",
   "license": "MIT",
@@ -10,8 +10,7 @@
     "./client": "./src/client.js",
     "./server": "./src/server.js",
     "./protocol": "./src/protocol.js",
-    "./storage": "./src/storage.js",
-    "./memory-storage": "./src/memory-storage.js"
+    "./storage": "./src/storage.js"
   },
   "files": [
     "src",

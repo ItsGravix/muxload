@@ -2,7 +2,6 @@ import { mkdir, open, readFile, writeFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { UploadHttpError } from "./server.js";
-export { createMemoryStorage } from './memory-storage.js';
 
 /** Persistent local files for one service instance/process per directory. */
 export function createLocalStorage({ directory, owner, validate, finalize, maxFileBytes = 2 * 1024 ** 3 } = {}) {
