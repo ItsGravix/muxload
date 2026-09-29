@@ -1,6 +1,6 @@
 {
   "name": "@itsgravix/muxload",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Fair, resumable, multiplexed file uploads over ordinary HTTP.",
   "type": "module",
   "license": "MIT",

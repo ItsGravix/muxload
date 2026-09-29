@@ -106,6 +106,25 @@ const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mill
 
 export function createUploadClient(options = {}) {
   const endpoint = String(options.endpoint || "/api/mux-upload").replace(/\/$/, "");
+  const configuredRoutes = options.routes ?? {};
+  if (!configuredRoutes || typeof configuredRoutes !== "object" || Array.isArray(configuredRoutes)) {
+    throw new TypeError("routes must be an object.");
+  }
+  const routeDefaults = {
+    create: () => "uploads",
+    batch: () => "batches",
+    status: (ids) => `status?ids=${ids.map(encodeURIComponent).join(",")}`,
+    complete: (id) => `uploads/${encodeURIComponent(id)}/complete`,
+    remove: (id) => `uploads/${encodeURIComponent(id)}`,
+  };
+  const route = (name, value) => {
+    const configured = configuredRoutes[name];
+    const path = typeof configured === "function"
+      ? configured(value)
+      : configured ?? routeDefaults[name](value);
+    if (typeof path !== "string" || !path) throw new TypeError(`routes.${name} must resolve to a URL string.`);
+    return /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? path : `${endpoint}/${path.replace(/^\/+/, "")}`;
+  };
   const minBatchBytes = clampInteger(options.minBatchBytes ?? 128 * KiB, 16 * KiB, 100 * MiB, "minBatchBytes");
   const maxBatchBytes = clampInteger(options.maxBatchBytes ?? 4 * MiB, minBatchBytes, 100 * MiB, "maxBatchBytes");
   const minPartBytes = clampInteger(options.minPartBytes ?? 16 * KiB, 1024, minBatchBytes, "minPartBytes");
@@ -198,9 +217,9 @@ export function createUploadClient(options = {}) {
   };
 
   const reconcile = async (entries) => {
-    const ids = entries.map((entry) => encodeURIComponent(entry.id)).join(",");
+    const ids = entries.map((entry) => entry.id);
     try {
-      const payload = await jsonRequest("GET", `${endpoint}/status?ids=${ids}`, { timeoutMs: responseStallMs });
+      const payload = await jsonRequest("GET", route("status", ids), { timeoutMs: responseStallMs });
       for (const entry of entries) {
         const confirmed = payload.offsets?.[entry.id];
         if (Number.isSafeInteger(confirmed) && confirmed >= entry.record.offset && confirmed <= entry.record.size) {
@@ -219,7 +238,7 @@ export function createUploadClient(options = {}) {
     record.finishing = true;
     for (let attempt = 0; !record.cancelled; attempt += 1) {
       try {
-        const result = await jsonRequest("POST", `${endpoint}/uploads/${encodeURIComponent(record.id)}/complete`, {
+        const result = await jsonRequest("POST", route("complete", record.id), {
           body: {}, timeoutMs: responseStallMs,
         });
         record.settled = true;
@@ -257,7 +276,7 @@ export function createUploadClient(options = {}) {
     try {
       const encoded = encodeBatch(entries);
       const headers = await resolveHeaders();
-      const result = await xhrBatch(`${endpoint}/batches`, encoded, {
+      const result = await xhrBatch(route("batch"), encoded, {
         bodyStallMs,
         responseStallMs,
         headers,
@@ -324,7 +343,7 @@ export function createUploadClient(options = {}) {
     if (record.removing || record.settled || record.inFlight) return;
     record.removing = true;
     try {
-      if (record.id) await jsonRequest("DELETE", `${endpoint}/uploads/${encodeURIComponent(record.id)}`, { timeoutMs: responseStallMs });
+      if (record.id) await jsonRequest("DELETE", route("remove", record.id), { timeoutMs: responseStallMs });
     } catch {
       // Cancellation is local-first. Server cleanup may also expire abandoned sessions.
     } finally {
@@ -359,7 +378,7 @@ export function createUploadClient(options = {}) {
 
     try {
       await prepare();
-      const created = await jsonRequest("POST", `${endpoint}/uploads`, {
+      const created = await jsonRequest("POST", route("create"), {
         body: {
           name: file.name || "upload.bin",
           size: file.size,
