@@ -22,43 +22,69 @@ Pin a release in production:
 npm install github:ItsGravix/muxload#v0.6.0
 ```
 
-## Easy HTTP setup
+## Get started with Express
 
-If your browser sends files to one upload route, use the convenience helper:
+You need two pieces: server code to receive and save files, and browser code to send the files the user selects. The examples below assume your website and Express API use the same origin.
 
-```js
-import { createHttpUploadClient } from "@itsgravix/muxload";
+### 1. Add uploads to your Express server
 
-const uploads = createHttpUploadClient({ endpoint: "/api/muxload" });
+Install Muxload in your server project and your frontend project if they are separate. Install Express with `npm install express` if you do not already use it.
 
-await uploads.upload(file, {
-  metadata: { kind: "audio" },
-  onProgress({ percentage }) {
-    console.log(`${percentage}%`);
-  },
-});
-```
-
-The endpoint is only an HTTP setting. `createHttpUploadClient()` combines the reusable upload scheduler with Muxload's built-in HTTP transport.
-
-On an Express server, mount the matching router:
+Add this to your existing Express app, after your authentication middleware and before any catch-all routes:
 
 ```js
 import express from "express";
 import { createExpressUploadRouter } from "@itsgravix/muxload/server";
 import { createLocalStorage } from "@itsgravix/muxload/storage";
 
-const app = express();
 const storage = createLocalStorage({
-  directory: "./uploads",
-  owner: (request) => request.user.id,
+  directory: "./uploads", // Where files are saved on the server.
+  owner: (request) => request.user?.id,
 });
 
 app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
-app.listen(3000);
 ```
 
-Muxload adds routes to your existing server; it does not start or host a server itself.
+Here, `app` is your existing Express application. Your authentication middleware must provide a non-empty string user ID at `request.user.id`; change `owner` to read your application's user or session ID. Muxload uses it to keep each user's uploads separate. Without an identity, the storage adapter rejects uploads.
+
+`app.use("/api/muxload", ...)` creates the upload routes under that URL. Muxload supplies the routes for starting uploads, receiving pieces, checking progress, completing uploads, and cancelling them. You do not need to write those routes yourself.
+
+### 2. Send files from your browser
+
+Add a file picker to your page:
+
+```html
+<input id="files" type="file" multiple />
+```
+
+Put this in your frontend JavaScript, loaded after the input exists. The package import works with a frontend bundler such as Vite:
+
+```js
+import { createHttpUploadClient } from "@itsgravix/muxload";
+
+// Match the path in app.use() on your Express server.
+const uploads = createHttpUploadClient({ endpoint: "/api/muxload" });
+
+document.querySelector("#files").addEventListener("change", (event) => {
+  for (const file of event.target.files) {
+    uploads.upload(file, {
+      onProgress({ percentage }) {
+        console.log(`${file.name}: ${percentage}%`);
+      },
+    }).then((result) => {
+      console.log("Upload complete:", result);
+    }).catch((error) => {
+      console.error(`Could not upload ${file.name}:`, error);
+    });
+  }
+});
+```
+
+`endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above, not a disk folder or a route created by the browser. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
+
+Keep one client for the page. Each selected file joins its scheduler, including files added while other uploads are running. The server saves the original bytes in `uploads/<id>/data` and keeps the original filename in the upload record.
+
+See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
 ## More control
 

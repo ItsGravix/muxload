@@ -1,14 +1,23 @@
 # Express and local disk
 
-This is the shortest complete Muxload setup. Your application owns the Express server; Muxload only supplies an upload router and storage adapter.
+Start with the [Express quick start in the README](../../README.md#get-started-with-express), which connects a file picker to your existing Express server. This guide explains the settings and optional hooks.
 
-## Browser
+## How the browser finds your server
+
+Mount the router on your existing Express app:
+
+```js
+app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
+```
+
+Then use the same path in your browser client. `endpoint` is the base URL of those server routes:
 
 ```js
 import { createHttpUploadClient } from "@itsgravix/muxload";
 
 const uploads = createHttpUploadClient({ endpoint: "/api/muxload" });
 
+// file is a File from your page's file input.
 const result = await uploads.upload(file, {
   metadata: { kind: "audio" },
   onProgress({ percentage }) {
@@ -19,14 +28,17 @@ const result = await uploads.upload(file, {
 
 Keep one client for the page. Calling `upload()` again adds the new file to the same scheduler, even while other files are moving.
 
-## Server
+If you choose `/files` instead, change both paths to `/files`. A relative endpoint uses the browser page's origin. During local development, if your frontend and Express app run on different ports, either proxy this path to Express through your frontend development server or use the Express server's full URL and configure CORS and authentication accordingly.
+
+## Configure storage on your server
+
+Use your existing `app` and authentication middleware. The `owner` callback below expects that middleware to set `request.user.id` to a non-empty string. Adapt it to your application's identity field; Muxload does not implement login for you.
 
 ```js
 import express from "express";
 import { createExpressUploadRouter } from "@itsgravix/muxload/server";
 import { createLocalStorage } from "@itsgravix/muxload/storage";
 
-const app = express();
 const storage = createLocalStorage({
   directory: "./uploads",
   owner: (request) => request.user?.id,
@@ -36,14 +48,20 @@ const storage = createLocalStorage({
   },
   finalize: async (request, upload) => {
     // upload.path is the completed temporary file.
-    return { id: upload.id, path: upload.path };
+    return { id: upload.id, complete: true };
   },
 });
 
 app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
-app.listen(3000);
 ```
 
 Files are saved as `uploads/<id>/data`; the original name stays in the upload record. Use one local-storage service instance per directory in a single Node.js process. For multiple server processes, use shared storage with atomic offset updates instead.
 
 Make `finalize` safe to call again: if a process stops after your work finishes but before the result is recorded, the operation can be retried. Also schedule cleanup for abandoned uploads.
+
+## If the first upload fails
+
+- **404:** Check that the browser endpoint reaches the Express mount path, and that the router is mounted before catch-all routes.
+- **401:** Check that authentication runs before the upload router and that `owner` returns a non-empty string ID.
+- **CORS error:** If the browser and server have different origins, allow your frontend origin, the upload methods (`POST`, `GET`, `DELETE`), and required headers on the server. Cookie authentication across origins also needs the client's `credentials: "include"` setting and matching server CORS configuration.
+- **415:** Let the Muxload router parse its binary request bodies. Avoid earlier middleware that consumes all request bodies as JSON, text, or raw data.
