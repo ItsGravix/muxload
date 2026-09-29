@@ -1,6 +1,6 @@
 # Muxload
 
-Muxload makes large browser uploads resumable and lets several files share bounded HTTP requests fairly. It uses normal HTTP—no WebSockets—and never changes or compresses file bytes.
+Muxload makes large browser uploads resumable and lets several files share bounded HTTP requests fairly. It uses normal HTTP and never changes or compresses file bytes.
 
 Muxload does **not** start or host a web server. It gives you:
 
