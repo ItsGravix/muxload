@@ -1,0 +1,52 @@
+{
+  "name": "@itsgravix/muxload",
+  "version": "0.1.0",
+  "description": "Fair, resumable, multiplexed file uploads over ordinary HTTP.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/client.js",
+    "./client": "./src/client.js",
+    "./server": "./src/server.js",
+    "./protocol": "./src/protocol.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/client.js && node --check src/server.js && node --check src/protocol.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "express": ">=4.18"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "express": "^5.1.0"
+  },
+  "keywords": [
+    "upload",
+    "resumable",
+    "multipart",
+    "cloudflare",
+    "xhr"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ItsGravix/muxload.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ItsGravix/muxload/issues"
+  },
+  "homepage": "https://github.com/ItsGravix/muxload#readme"
+}
