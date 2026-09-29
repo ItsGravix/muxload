@@ -2,7 +2,7 @@
 
 Muxload uploads pieces of several files in one bounded HTTP request. It is built for unreliable or highly variable connections where a long request is risky, but treating every file as a separate competing upload is also undesirable.
 
-It uses ordinary `POST` requests. There are no WebSockets and no full-file copies in application memory. A browser request contains a small manifest followed by bounded `Blob.slice()` pieces from several files.
+It uses ordinary `POST` requests and no full-file copies in application memory. A browser request contains a small manifest followed by bounded `Blob.slice()` pieces from several files.
 
 > Muxload is a focused solution, not a replacement for mature upload systems such as tus, object-storage multipart uploads, or a managed upload service. Use those when they fit your infrastructure.
 
