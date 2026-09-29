@@ -32,7 +32,7 @@ If you choose `/files` instead, change both paths to `/files`. A relative endpoi
 
 ## Configure storage on your server
 
-Use your existing `app` and authentication middleware. The `owner` callback below expects that middleware to set `request.user.id` to a non-empty string. Adapt it to your application's identity field; Muxload does not implement login for you.
+Use your existing `app`. No login, user, or session is required for this local setup.
 
 ```js
 import express from "express";
@@ -41,7 +41,6 @@ import { createLocalStorage } from "@itsgravix/muxload/storage";
 
 const storage = createLocalStorage({
   directory: "./uploads",
-  owner: (request) => request.user?.id,
   maxFileBytes: 2 * 1024 ** 3,
   validate: async (request, file) => {
     // Optionally reject the file before accepting bytes.
@@ -62,6 +61,5 @@ Make `finalize` safe to call again: if a process stops after your work finishes 
 ## If the first upload fails
 
 - **404:** Check that the browser endpoint reaches the Express mount path, and that the router is mounted before catch-all routes.
-- **401:** Check that authentication runs before the upload router and that `owner` returns a non-empty string ID.
 - **CORS error:** If the browser and server have different origins, allow your frontend origin, the upload methods (`POST`, `GET`, `DELETE`), and required headers on the server. Cookie authentication across origins also needs the client's `credentials: "include"` setting and matching server CORS configuration.
 - **415:** Let the Muxload router parse its binary request bodies. Avoid earlier middleware that consumes all request bodies as JSON, text, or raw data.

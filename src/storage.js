@@ -4,18 +4,12 @@ import { randomUUID } from "node:crypto";
 import { UploadHttpError } from "./server.js";
 
 /** Persistent local files for one service instance/process per directory. */
-export function createLocalStorage({ directory, owner, validate, finalize, maxFileBytes = 2 * 1024 ** 3 } = {}) {
+export function createLocalStorage({ directory, validate, finalize, maxFileBytes = 2 * 1024 ** 3 } = {}) {
   if (!directory) throw new TypeError("directory is required.");
-  if (typeof owner !== "function") throw new TypeError("owner(context) is required.");
   const root = path.resolve(directory);
   const location = (id) => {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw new UploadHttpError(404, "Upload not found.");
     return path.join(root, id);
-  };
-  const identity = async (context) => {
-    const value = await owner(context);
-    if (typeof value !== "string" || !value) throw new UploadHttpError(401, "Authentication required.");
-    return value;
   };
   const save = async (upload) => {
     const target = location(upload.id);
@@ -25,21 +19,18 @@ export function createLocalStorage({ directory, owner, validate, finalize, maxFi
   };
   return {
     async createUpload(context, spec) {
-      const user = await identity(context);
       if (spec.size > maxFileBytes) throw new UploadHttpError(413, "File is too large.");
       await validate?.(context, spec);
-      const upload = { id: randomUUID(), owner: user, name: spec.name, metadata: spec.metadata, size: spec.size, offset: 0 };
+      const upload = { id: randomUUID(), name: spec.name, metadata: spec.metadata, size: spec.size, offset: 0 };
       await mkdir(location(upload.id), { recursive: true, mode: 0o700 });
       await writeFile(path.join(location(upload.id), "data"), new Uint8Array(), { flag: "wx", mode: 0o600 });
       await save(upload);
       return upload;
     },
     async resolveUpload(context, id) {
-      const user = await identity(context);
       let upload;
       try { upload = JSON.parse(await readFile(path.join(location(id), "record.json"), "utf8")); }
       catch (error) { if (error.code === "ENOENT") throw new UploadHttpError(404, "Upload not found."); throw error; }
-      if (upload.owner !== user) throw new UploadHttpError(404, "Upload not found.");
       return upload;
     },
     async writePart(context, upload, bytes, offset) {

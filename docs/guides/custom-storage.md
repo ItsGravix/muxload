@@ -10,10 +10,10 @@ import { createExpressUploadRouter } from '@itsgravix/muxload/server';
 app.use('/api/muxload', createExpressUploadRouter({
   express,
   async createUpload(request, specification) {
-    return yourUploads.start(request.user.id, specification);
+    return yourUploads.start(specification);
   },
   async resolveUpload(request, id) {
-    return yourUploads.findOwned(request.user.id, id);
+    return yourUploads.find(id);
   },
   async writePart(request, upload, bytes, offset) {
     // The actual bytes, as a Uint8Array, and their position in the file.
@@ -29,14 +29,14 @@ app.use('/api/muxload', createExpressUploadRouter({
 }));
 ```
 
-`yourUploads` stands for your own functions or service. Replace those calls with your implementation. Authentication middleware supplies `request.user` before the router runs. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse.
+`yourUploads` stands for your own functions or service. Replace those calls with your implementation. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse. Muxload has no user or authentication concept. If your application needs access control, use the supplied `context` inside these functions and implement your own checks.
 
 ## What each function receives and returns
 
 | Function | Your responsibility |
 | --- | --- |
-| `createUpload(context, specification)` | Authenticate, enforce limits, and create a record. Return `{ id, size, offset: 0, ...yourFields }`. The specification contains `name`, `size`, and `metadata`. |
-| `resolveUpload(context, id)` | Verify ownership and return the latest record, including its confirmed `offset`. Throw if it is unavailable. |
+| `createUpload(context, specification)` | Enforce your limits and create a record. Return `{ id, size, offset: 0, ...yourFields }`. The specification contains `name`, `size`, and `metadata`. |
+| `resolveUpload(context, id)` | Return the latest record, including its confirmed `offset`. Throw if it is unavailable. Apply application authorization here if needed. |
 | `writePart(context, upload, bytes, offset)` | Accept the byte range and record the new confirmed offset. Resolve only after your destination has accepted the data to the durability level your application promises. |
 | `completeUpload(context, upload)` | Finish your processing and return a JSON-compatible result, such as `{ assetId }`. Preserve the result so retries do not repeat side effects. |
 | `removeUpload(context, upload)` | Release your resources and remove the upload record. |

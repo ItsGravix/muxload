@@ -19,7 +19,7 @@ npm install github:ItsGravix/muxload
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/muxload#v0.8.0
+npm install github:ItsGravix/muxload#v0.9.0
 ```
 
 ## Optional quick start: Express
@@ -32,7 +32,7 @@ The Express example needs two pieces: server code to receive and save files, and
 
 Install Muxload in your server project and your frontend project if they are separate. Install Express with `npm install express` if you do not already use it.
 
-Add this to your existing Express app, after your authentication middleware and before any catch-all routes:
+Add this to your existing Express app before any catch-all routes:
 
 ```js
 import express from "express";
@@ -41,13 +41,12 @@ import { createLocalStorage } from "@itsgravix/muxload/storage";
 
 const storage = createLocalStorage({
   directory: "./uploads", // Where files are saved on the server.
-  owner: (request) => request.user?.id,
 });
 
 app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
 ```
 
-Here, `app` is your existing Express application. Your authentication middleware must provide a non-empty string user ID at `request.user.id`; change `owner` to read your application's user or session ID. Muxload uses it to keep each user's uploads separate. Without an identity, the storage adapter rejects uploads.
+Here, `app` is your existing Express application. Muxload does not require accounts, users, sessions, or authentication. The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
 `app.use("/api/muxload", ...)` creates the upload routes under that URL. Muxload supplies the routes for starting uploads, receiving pieces, checking progress, completing uploads, and cancelling them. You do not need to write those routes yourself.
 
@@ -159,7 +158,7 @@ Create one client and reuse it for every file. Every `upload()` call joins the s
 
 ## Before production
 
-- Authenticate every operation and verify upload ownership.
+- For public or multi-user servers, add authentication and ownership checks in your application callbacks.
 - Limit file sizes, request rates, active sessions, and storage use.
 - Generate storage paths on the server; never trust the original filename as a path.
 - Persist offsets atomically when multiple processes can receive requests.

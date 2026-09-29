@@ -54,8 +54,8 @@ The batch route must give `mux.batch()` the raw binary request body. Do not pars
 
 | Callback | Responsibility |
 | --- | --- |
-| `createUpload(context, specification)` | Authenticate, create a record, and return `{ id, size, offset }`. |
-| `resolveUpload(context, id)` | Verify ownership and return the current record. |
+| `createUpload(context, specification)` | Create a record and return `{ id, size, offset }`. Add application checks here if needed. |
+| `resolveUpload(context, id)` | Return the current record. Add authorization here if needed. |
 | `writePart(context, upload, bytes, offset)` | Store unchanged bytes at the exact offset. |
 | `completeUpload(context, upload)` | Validate or publish the finished file and return a result. |
 | `removeUpload(context, upload)` | Remove temporary bytes and the record. |

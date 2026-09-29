@@ -58,7 +58,7 @@ function validateSpecification(specification) {
 }
 
 /**
- * Framework-neutral protocol engine. The application supplies identity/storage
+ * Framework-neutral protocol engine. The application supplies lifecycle/storage
  * callbacks; Muxload owns validation, locking, offsets and retry semantics.
  */
 export function createUploadService(options) {
