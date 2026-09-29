@@ -8,12 +8,6 @@ It works with ordinary HTTP through Node.js, Express, serverless and Fetch-compa
 
 Muxload sends the original bytes. It does not compress, convert, base64-encode, or reduce file quality.
 
-## Large files on slow connections
-
-A proxy or server may reject a single request above its body-size limit even when it can accept a much larger file over several requests. Muxload handles that difference directly: a 3 GB file can be transferred as a resumable sequence of requests whose individual bodies remain below your configured maximum.
-
-This works with ordinary HTTP. It does not bypass or disable an infrastructure limit; it structures the upload so each request respects that limit.
-
 ## Install
 
 Install the latest version directly from GitHub:
