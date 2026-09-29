@@ -33,28 +33,36 @@ If you already have an Express app, add the imports near the top of your server 
 
 ```js
 import express from "express";
+
+// Parcelweave imports.
 import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
+// Parcelweave setup starts here.
 const storage = createLocalStorage({
   directory: "./uploads", // Where files are saved on the server.
 });
 
 app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+// Parcelweave setup ends here.
 ```
+
+Both `createLocalStorage()` and `createExpressUploadRouter()` are Parcelweave code. The first tells Parcelweave where to save bytes; the second connects Parcelweave to your Express app.
 
 Here is the same setup as a complete server:
 
 ```js
 import express from "express";
+
+// Parcelweave imports.
 import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
+// Your normal Express setup.
 const app = express();
-
-// Put normal middleware, such as authentication, above Parcelweave.
 app.use(express.json());
 
+// Parcelweave setup starts here.
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
@@ -69,7 +77,9 @@ const storage = createLocalStorage({
 
 // Mount this after middleware, but before catch-all and 404 routes.
 app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+// Parcelweave setup ends here.
 
+// The rest of your normal Express routes.
 app.get("/", (request, response) => response.send("Server is running"));
 
 // Catch-all routes belong after Parcelweave.
