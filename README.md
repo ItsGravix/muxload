@@ -1,6 +1,12 @@
 # Muxload
 
-Reliable, resumable browser uploads using normal HTTP requests. Muxload supports several files at once and never compresses or changes their bytes.
+Muxload is a JavaScript library for reliable, resumable, chunked file uploads from web browsers to Node.js, Express, serverless functions, Fetch-compatible runtimes, or custom HTTP servers.
+
+It is designed for large files, slow or unstable internet connections, reverse proxies such as Cloudflare, and applications that upload several files at the same time. Muxload combines small pieces from multiple files into bounded HTTP requests, reports real upload progress through `XMLHttpRequest`, retries interrupted requests, and resumes from server-confirmed byte offsets without restarting completed work.
+
+Muxload uses ordinary HTTP requests rather than WebSockets. It sends the original bytes without compression, conversion, base64 encoding, or quality loss. Applications can use the built-in HTTP transport and Express router, a Fetch API handler, a local-disk storage adapter, custom routes, custom storage, or a completely custom transport with no endpoint configuration.
+
+Common use cases include large audio, video, image, archive, and dataset uploads; concurrent browser uploads; uploads through Cloudflare or another reverse proxy; upload progress bars; retry and resume support; and custom JavaScript upload infrastructure where tus or managed object storage is not the right fit.
 
 ## Install
 

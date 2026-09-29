@@ -1,7 +1,7 @@
 {
   "name": "@itsgravix/muxload",
-  "version": "0.5.0",
-  "description": "Fair, resumable, multiplexed file uploads over ordinary HTTP.",
+  "version": "0.5.1",
+  "description": "JavaScript library for resumable, chunked, concurrent large-file uploads from browsers to Node.js, Express, serverless, Fetch, or custom HTTP backends.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
@@ -36,10 +36,26 @@
     "express": "^5.1.0"
   },
   "keywords": [
+    "large-file-upload",
+    "browser-upload",
+    "chunked-upload",
+    "concurrent-upload",
     "upload",
     "resumable",
+    "resumable-upload",
     "multipart",
+    "multiplexing",
+    "file-transfer",
+    "upload-progress",
+    "retry",
+    "resume",
+    "javascript",
+    "nodejs",
+    "express",
+    "serverless",
+    "fetch-api",
     "cloudflare",
+    "reverse-proxy",
     "xhr"
   ],
   "repository": {
