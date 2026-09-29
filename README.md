@@ -91,7 +91,7 @@ See the [Express guide](docs/guides/express-local-disk.md) for storage limits, c
 
 ### Choose how files are stored
 
-Handle uploaded data directly with your own functions. `writePart(context, upload, bytes, offset)` receives each accepted byte range, and `completeUpload(context, upload)` runs once the entire file has been received. You decide where bytes go and what happens to the finished file. No Muxload storage adapter is required.
+Handle uploaded data directly with your own functions. `createUpload` can save any destination in your record, `writePart(context, upload, bytes, offset)` receives each accepted byte range, and `completeUpload(context, upload)` runs once the entire file has been received. You decide the directory, filename, stream, storage service, and finished-file behavior. No Muxload storage adapter is required.
 
 Pass these functions directly to the Express router, Fetch handler, or standalone upload service. The browser code stays the same. See [custom byte and completion handlers](docs/guides/custom-storage.md) for the complete setup, including using your own streams.
 

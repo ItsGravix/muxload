@@ -43,6 +43,8 @@ app.use('/api/muxload', createExpressUploadRouter({
 
 The context is the Express request, the Fetch handler's supplied context (the Request by default), or whatever you pass to the standalone service. Records can include your own fields, such as a destination key or processing job ID. Muxload does not assemble a complete file object for a custom handler: your completion function retrieves bytes or a stream from the destination you chose.
 
+Choose any directory, object key, stream, or filename inside `createUpload`, save that value in your own record, and return it again from `resolveUpload`. Muxload passes the record to `writePart`, so the handler can write each byte range to that destination. Muxload does not interpret the destination or impose a directory layout.
+
 ## Send pieces to your own stream
 
 For a Node.js Writable, you can await its write callback inside `writePart`:
