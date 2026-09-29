@@ -24,7 +24,7 @@ npm install github:ItsGravix/parcelweave#v0.10.0
 
 ## Optional quick start: Express
 
-This section shows one ready-made setup for readers who already use Express. It is not required to use Parcelweave. For another server or infrastructure, go directly to the [custom server guide](docs/guides/custom-router.md), [Fetch and serverless guide](docs/guides/serverless-fetch.md), or [custom transport guide](docs/guides/custom-transport.md).
+This section shows one ready-made setup if you use Express. It is not required to use Parcelweave. For another server or infrastructure, go to the [custom server guide](docs/guides/custom-router.md), [Fetch and serverless guide](docs/guides/serverless-fetch.md), or [custom transport guide](docs/guides/custom-transport.md).
 
 
 ### 1. Add uploads to your Express server
