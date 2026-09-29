@@ -29,7 +29,7 @@ This section shows one ready-made setup if you use Express. It is not required t
 
 ### 1. Add uploads to your Express server
 
-If you already have an Express app, add the imports near the top of your server file, create the storage adapter, and mount the router before any catch-all or 404 route:
+If you already have an Express app, add the imports near the top of your server file, create the storage adapter, and mount the router.
 
 ```js
 import express from "express";
