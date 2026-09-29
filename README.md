@@ -29,7 +29,7 @@ This section shows one ready-made setup if you use Express. It is not required t
 
 ### 1. Add uploads to your Express server
 
-Add this to your existing Express app before any catch-all routes:
+If you already have an Express app, add the imports near the top of your server file, create the storage adapter, and mount the router before any catch-all or 404 route:
 
 ```js
 import express from "express";
@@ -43,7 +43,46 @@ const storage = createLocalStorage({
 app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
 ```
 
-Here, `app` is your existing Express application. The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
+Here is the same setup as a complete server:
+
+```js
+import express from "express";
+import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
+import { createLocalStorage } from "@itsgravix/parcelweave/storage";
+
+const app = express();
+
+// Put normal middleware, such as authentication, above Parcelweave.
+app.use(express.json());
+
+const storage = createLocalStorage({
+  directory: "./uploads",
+  maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
+  validate: async (request, file) => {
+    // Optional: inspect metadata or reject a file before receiving its bytes.
+  },
+  finalize: async (request, upload) => {
+    // Optional: upload.path is the completed file on disk.
+    return { id: upload.id, complete: true };
+  },
+});
+
+// Mount this after middleware, but before catch-all and 404 routes.
+app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+
+app.get("/", (request, response) => response.send("Server is running"));
+
+// Catch-all routes belong after Parcelweave.
+app.use((request, response) => response.status(404).send("Not found"));
+
+app.listen(3000, () => {
+  console.log("Server listening on http://localhost:3000");
+});
+```
+
+Only `directory` is required. Parcelweave creates the upload directory when the first file arrives. You can omit `maxFileBytes`, `validate`, and `finalize` until you need them. Completed bytes are stored at `uploads/<upload-id>/data`; `finalize` is where you can move the file, start processing it, or return your own result.
+
+The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
 `app.use("/api/parcelweave", ...)` adds Parcelweave's upload routes at that URL.
 

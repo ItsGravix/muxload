@@ -1,6 +1,6 @@
 # Express and local disk
 
-Start with the [Express quick start in the README](../../README.md#get-started-with-express), which connects a file picker to your existing Express server. This guide explains the settings and optional hooks.
+Start with the [Express quick start in the README](../../README.md#optional-quick-start-express), which connects a file picker to your existing Express server. This guide explains the settings and optional hooks.
 
 ## How the browser finds your server
 
