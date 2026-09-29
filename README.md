@@ -80,7 +80,7 @@ document.querySelector("#files").addEventListener("change", (event) => {
 
 `endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
 
-**IMPORTANT!** Keep one client for the page. When you upload multiple files, we use an algorithm to send all the files in an optimized manner using chunks. Using multiple clients can break this core functionality.
+**IMPORTANT!** Create one client and reuse it for every file on the page. Files uploaded through that client share one scheduler and can be multiplexed into bounded requests. Separate clients still work, but they cannot coordinate with one another and may compete for the same bandwidth.
 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
