@@ -26,11 +26,8 @@ npm install github:ItsGravix/muxload#v0.9.0
 
 This section shows one ready-made setup for readers who already use Express. It is not required to use Muxload. For another server or infrastructure, go directly to the [custom server guide](docs/guides/custom-router.md), [Fetch and serverless guide](docs/guides/serverless-fetch.md), or [custom transport guide](docs/guides/custom-transport.md).
 
-The Express example needs two pieces: server code to receive and save files, and browser code to send the files the user selects. It assumes your website and Express API use the same origin.
 
 ### 1. Add uploads to your Express server
-
-Install Muxload in your server project and your frontend project if they are separate. Install Express with `npm install express` if you do not already use it.
 
 Add this to your existing Express app before any catch-all routes:
 
@@ -46,7 +43,9 @@ const storage = createLocalStorage({
 app.use("/api/muxload", createExpressUploadRouter({ express, storage }));
 ```
 
-Here, `app` is your existing Express application. Muxload does not require accounts, users, sessions, or authentication. The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
+Here, `app` is your existing Express application. The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
+
+`app.use("/api/muxload", ...)` creates the upload routes under that URL. Muxload supplies the routes for starting uploads, receiving pieces, checking progress, completing uploads, and cancelling them. You do not need to write those routes yourself.
 
 ### 2. Send files from your browser
 
@@ -79,9 +78,9 @@ document.querySelector("#files").addEventListener("change", (event) => {
 });
 ```
 
-`endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above, not a disk folder or a route created by the browser. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
+`endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
 
-Keep one client for the page. Each selected file joins its scheduler, including files added while other uploads are running. The server saves the original bytes in `uploads/<id>/data` and keeps the original filename in the upload record.
+**IMPORTANT!** Keep one client for the page. When you upload multiple files, we use an algorithm to send all the files in an optimized manner using chunks. Using multiple clients can break this core functionality.
 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
