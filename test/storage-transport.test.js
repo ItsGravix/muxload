@@ -9,7 +9,7 @@ import { createLocalStorage } from "../src/storage.js";
 import { encodeBatch } from "../src/protocol.js";
 
 test("endpoint-free transport resumes a committed batch after response loss and pauses independently", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "muxload-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "parcelweave-test-"));
   try {
     const storage = createLocalStorage({ directory });
     const service = createUploadService({ storage });

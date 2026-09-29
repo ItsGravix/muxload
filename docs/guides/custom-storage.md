@@ -1,13 +1,13 @@
 # Handle bytes and completed uploads yourself
 
-Supply functions directly to Muxload. You control what happens to each byte range and to the completed file; no folder, memory adapter, or Muxload storage implementation is required.
+Supply functions directly to Parcelweave. You control what happens to each byte range and to the completed file; no folder, memory adapter, or Parcelweave storage implementation is required.
 
 ## Express example
 
 ```js
-import { createExpressUploadRouter } from '@itsgravix/muxload/server';
+import { createExpressUploadRouter } from '@itsgravix/parcelweave/server';
 
-app.use('/api/muxload', createExpressUploadRouter({
+app.use('/api/parcelweave', createExpressUploadRouter({
   express,
   async createUpload(request, specification) {
     return yourUploads.start(specification);
@@ -29,7 +29,7 @@ app.use('/api/muxload', createExpressUploadRouter({
 }));
 ```
 
-`yourUploads` stands for your own functions or service. Replace those calls with your implementation. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse. Muxload has no user or authentication concept. If your application needs access control, use the supplied `context` inside these functions and implement your own checks.
+`yourUploads` stands for your own functions or service. Replace those calls with your implementation. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse. Parcelweave has no user or authentication concept. If your application needs access control, use the supplied `context` inside these functions and implement your own checks.
 
 ## What each function receives and returns
 
@@ -41,9 +41,9 @@ app.use('/api/muxload', createExpressUploadRouter({
 | `completeUpload(context, upload)` | Finish your processing and return a JSON-compatible result, such as `{ assetId }`. Preserve the result so retries do not repeat side effects. |
 | `removeUpload(context, upload)` | Release your resources and remove the upload record. |
 
-The context is the Express request, the Fetch handler's supplied context (the Request by default), or whatever you pass to the standalone service. Records can include your own fields, such as a destination key or processing job ID. Muxload does not assemble a complete file object for a custom handler: your completion function retrieves bytes or a stream from the destination you chose.
+The context is the Express request, the Fetch handler's supplied context (the Request by default), or whatever you pass to the standalone service. Records can include your own fields, such as a destination key or processing job ID. Parcelweave does not assemble a complete file object for a custom handler: your completion function retrieves bytes or a stream from the destination you chose.
 
-Choose any directory, object key, stream, or filename inside `createUpload`, save that value in your own record, and return it again from `resolveUpload`. Muxload passes the record to `writePart`, so the handler can write each byte range to that destination. Muxload does not interpret the destination or impose a directory layout.
+Choose any directory, object key, stream, or filename inside `createUpload`, save that value in your own record, and return it again from `resolveUpload`. Parcelweave passes the record to `writePart`, so the handler can write each byte range to that destination. Parcelweave does not interpret the destination or impose a directory layout.
 
 ## Send pieces to your own stream
 
@@ -67,9 +67,9 @@ These are piece callbacks, not a live stream of the incoming HTTP body. The buil
 
 ## Keep retries correct
 
-Muxload skips already-confirmed pieces and serializes writes to each file within one service instance. Your `resolveUpload` must return the offset saved by `writePart`. If data was written but recording the offset failed, the same range can arrive again: make replay safe. An append-only stream without recovery or offset tracking is insufficient for resumable uploads.
+Parcelweave skips already-confirmed pieces and serializes writes to each file within one service instance. Your `resolveUpload` must return the offset saved by `writePart`. If data was written but recording the offset failed, the same range can arrive again: make replay safe. An append-only stream without recovery or offset tracking is insufficient for resumable uploads.
 
-Keep confirmed state across requests, and across restarts if you promise persistent resume. Multiple processes need shared locking or transactional offset checks. Muxload's locks apply only inside one service instance.
+Keep confirmed state across requests, and across restarts if you promise persistent resume. Multiple processes need shared locking or transactional offset checks. Parcelweave's locks apply only inside one service instance.
 
 Do not retain the incoming `bytes` view unnecessarily: it shares the batch's buffer. If you need a long-lived copy, `bytes.slice()` copies just that piece. Await processing before returning so failed writes are not acknowledged as successful.
 

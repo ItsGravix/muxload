@@ -7,7 +7,7 @@ Use this setup when you already have a router, cannot mount an Express router, o
 Keep HTTP configuration in the transport and scheduling configuration in the client:
 
 ```js
-import { createHttpTransport, createUploadClient } from "@itsgravix/muxload";
+import { createHttpTransport, createUploadClient } from "@itsgravix/parcelweave";
 
 const transport = createHttpTransport({
   endpoint: "/api",
@@ -28,7 +28,7 @@ Route values may be full URLs, so individual operations can live on different se
 ## Connect your router
 
 ```js
-import { createUploadService } from "@itsgravix/muxload/server";
+import { createUploadService } from "@itsgravix/parcelweave/server";
 
 const mux = createUploadService({
   createUpload,
@@ -60,4 +60,4 @@ The batch route must give `mux.batch()` the raw binary request body. Do not pars
 | `completeUpload(context, upload)` | Validate or publish the finished file and return a result. |
 | `removeUpload(context, upload)` | Remove temporary bytes and the record. |
 
-Muxload handles decoding, bounds checks, duplicate pieces, offset reconciliation, and locking inside one service instance. Shared or multi-process storage must update offsets atomically.
+Parcelweave handles decoding, bounds checks, duplicate pieces, offset reconciliation, and locking inside one service instance. Shared or multi-process storage must update offsets atomically.

@@ -59,7 +59,7 @@ function validateSpecification(specification) {
 
 /**
  * Framework-neutral protocol engine. The application supplies lifecycle/storage
- * callbacks; Muxload owns validation, locking, offsets and retry semantics.
+ * callbacks; Parcelweave owns validation, locking, offsets and retry semantics.
  */
 export function createUploadService(options) {
   const callbacks = { ...options.storage, ...options };
@@ -215,7 +215,7 @@ export function createFetchUploadHandler(options) {
         await service.remove(context, decodeURIComponent(uploadMatch[1]));
         return new Response(null, { status: 204, headers: responseHeaders });
       }
-      return jsonResponse({ error: "Muxload route not found." }, 404, responseHeaders);
+      return jsonResponse({ error: "Parcelweave route not found." }, 404, responseHeaders);
     } catch (error) {
       const safe = error instanceof SyntaxError || error instanceof TypeError
         ? new UploadHttpError(400, error.message)

@@ -4,7 +4,7 @@ import { createUploadService, UploadHttpError } from '../src/server.js';
 import { encodeBatch } from '../src/protocol.js';
 
 test('direct handlers await a custom consumer, recover failed writes and return an application result', async () => {
-  // Application-owned processing state; no Muxload storage or assembled file.
+  // Application-owned processing state; no Parcelweave storage or assembled file.
   const record = { id: 'custom', size: 4, offset: 0, sum: 0 };
   let failWrite = true;
   let finishCalls = 0;

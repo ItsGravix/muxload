@@ -1,6 +1,6 @@
 {
-  "name": "@itsgravix/muxload",
-  "version": "0.9.0",
+  "name": "@itsgravix/parcelweave",
+  "version": "0.10.0",
   "description": "Resumable JavaScript uploads for large files, slow connections, and CDN or server request-body limits, with retries and real progress.",
   "type": "module",
   "license": "MIT",
@@ -65,10 +65,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ItsGravix/muxload.git"
+    "url": "git+https://github.com/ItsGravix/parcelweave.git"
   },
   "bugs": {
-    "url": "https://github.com/ItsGravix/muxload/issues"
+    "url": "https://github.com/ItsGravix/parcelweave/issues"
   },
-  "homepage": "https://github.com/ItsGravix/muxload#readme"
+  "homepage": "https://github.com/ItsGravix/parcelweave#readme"
 }

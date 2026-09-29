@@ -4,7 +4,7 @@ const PREFIX_BYTES = 8;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export const BATCH_CONTENT_TYPE = "application/vnd.muxload.batch";
+export const BATCH_CONTENT_TYPE = "application/vnd.parcelweave.batch";
 
 function assertSafeNonNegativeInteger(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -52,24 +52,24 @@ export function decodeBatch(buffer, { maxEntries = 64, maxManifestBytes = 64 * 1
     : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 
   if (bytes.byteLength < PREFIX_BYTES || !MAGIC.every((value, index) => bytes[index] === value)) {
-    throw new TypeError("Invalid Muxload batch signature.");
+    throw new TypeError("Invalid Parcelweave batch signature.");
   }
 
   const manifestLength = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     .getUint32(4, false);
   if (manifestLength > maxManifestBytes || PREFIX_BYTES + manifestLength > bytes.byteLength) {
-    throw new TypeError("Invalid Muxload manifest length.");
+    throw new TypeError("Invalid Parcelweave manifest length.");
   }
 
   let parsed;
   try {
     parsed = JSON.parse(decoder.decode(bytes.subarray(PREFIX_BYTES, PREFIX_BYTES + manifestLength)));
   } catch {
-    throw new TypeError("Invalid Muxload manifest JSON.");
+    throw new TypeError("Invalid Parcelweave manifest JSON.");
   }
 
   if (!Array.isArray(parsed?.entries) || parsed.entries.length === 0 || parsed.entries.length > maxEntries) {
-    throw new TypeError("Invalid Muxload entry count.");
+    throw new TypeError("Invalid Parcelweave entry count.");
   }
 
   const seen = new Set();

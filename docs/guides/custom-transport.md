@@ -3,7 +3,7 @@
 The upload scheduler does not require HTTP or an endpoint. A transport is the small adapter that connects its five operations to your infrastructure.
 
 ```js
-import { createUploadClient } from "@itsgravix/muxload";
+import { createUploadClient } from "@itsgravix/parcelweave";
 
 const uploads = createUploadClient({
   transport: {
@@ -26,17 +26,17 @@ The methods return promises:
 
 `batch` should call `onProgress(bytesSent)` with cumulative payload bytes for that batch, in piece order. It must settle its promise on success, failure, and stalled operations. Throw `new UploadError(message, { retryable: true })` for temporary failures; other errors stop the affected uploads.
 
-If your connection sends Muxload's binary format, use `encodeBatch(pieces)` from `@itsgravix/muxload/protocol`.
+If your connection sends Parcelweave's binary format, use `encodeBatch(pieces)` from `@itsgravix/parcelweave/protocol`.
 
 You can also replace only one part of the built-in HTTP behavior:
 
 ```js
-import { createHttpTransport, createUploadClient } from "@itsgravix/muxload";
+import { createHttpTransport, createUploadClient } from "@itsgravix/parcelweave";
 
-const http = createHttpTransport({ endpoint: "/api/muxload" });
+const http = createHttpTransport({ endpoint: "/api/parcelweave" });
 const uploads = createUploadClient({
   transport: { ...http, complete: (id) => myApi.publish(id) },
 });
 ```
 
-The scheduler remains unchanged whether data travels through Muxload HTTP routes, your own client library, RPC, a native bridge, or an in-process service.
+The scheduler remains unchanged whether data travels through Parcelweave HTTP routes, your own client library, RPC, a native bridge, or an in-process service.
