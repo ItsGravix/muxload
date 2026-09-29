@@ -29,7 +29,7 @@ npm install @itsgravix/muxload@github:ItsGravix/muxload
 For repeatable production builds, pin a release instead:
 
 ```bash
-npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.2.0
+npm install @itsgravix/muxload@github:ItsGravix/muxload#v0.3.0
 ```
 
 The unpinned command fetches the latest default branch when npm resolves the dependency. It does not automatically update an existing lockfile; run the install command again to update. A pinned tag is safer for applications.
@@ -79,11 +79,62 @@ The client communicates with five ordinary HTTP routes beneath `endpoint`:
 | `POST` | `/uploads/:id/complete` | Validate and finalize a completely received file. |
 | `DELETE` | `/uploads/:id` | Cancel and clean up one logical upload. |
 
-The route names are an HTTP protocol contract, not a requirement to run a traditional public web server. A gateway can map them to functions, workers, object storage, queues, or any other backend. See `src/server.js` for the request validation and response shapes.
+The route names are an HTTP protocol contract, not a requirement to run a traditional public web server. A gateway can map them to functions, workers, object storage, queues, or any other backend.
+
+## Portable server handler
+
+Most users should not implement those routes or parse the binary protocol themselves. `createFetchUploadHandler` accepts standard Web API `Request` objects and returns `Response` objects, so it works in Fetch-compatible runtimes and can be wrapped by most serverless platforms:
+
+```js
+import { createFetchUploadHandler, UploadHttpError } from "@itsgravix/muxload/server";
+
+const sessions = new Map();
+
+const handleUpload = createFetchUploadHandler({
+  basePath: "/v1",
+
+  async createUpload(request, spec) {
+    const user = await authenticate(request);
+    const upload = await storage.create({ user, size: spec.size, metadata: spec.metadata });
+    sessions.set(upload.id, upload);
+    return upload; // { id, size, offset, ...your own fields }
+  },
+
+  async resolveUpload(request, id) {
+    const user = await authenticate(request);
+    const upload = sessions.get(id);
+    if (!upload || upload.userId !== user.id) throw new UploadHttpError(404, "Upload not found.");
+    return upload;
+  },
+
+  async writePart(request, upload, bytes, offset) {
+    await storage.write(upload, bytes, offset);
+  },
+
+  async completeUpload(request, upload) {
+    return storage.complete(upload);
+  },
+
+  async removeUpload(request, upload) {
+    await storage.remove(upload);
+    sessions.delete(upload.id);
+  },
+});
+
+// Cloudflare Worker-style example. Other Fetch-compatible runtimes use the
+// same handler inside their own entry point.
+export default {
+  fetch(request) {
+    return handleUpload(request);
+  },
+};
+```
+
+Muxload handles route matching, request limits, manifest decoding, validation, per-file locking, confirmed offsets, duplicate batches, status reconciliation, and HTTP responses. The five callbacks remain application-owned because Muxload cannot choose users, authorization rules, storage, or final processing on the application's behalf.
 
 ## Optional Express adapter
 
-Muxload deliberately leaves storage, authentication, ownership, and final validation to the application:
+Express users receive the same protocol engine through a router:
 
 ```js
 import express from "express";

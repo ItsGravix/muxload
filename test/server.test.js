@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import { once } from "node:events";
-import { createExpressUploadRouter, UploadHttpError } from "../src/server.js";
+import { createExpressUploadRouter, createFetchUploadHandler, UploadHttpError } from "../src/server.js";
 import { encodeBatch } from "../src/protocol.js";
 
 async function fixture() {
@@ -78,4 +78,47 @@ test("returns confirmed offsets when a client sends an invalid future offset", a
   assert.deepEqual(await response.json(), {
     error: "Upload offsets no longer match.", offsets: { [upload.id]: 0 },
   });
+});
+
+test("portable Fetch handler owns routing, decoding, offsets and responses", async () => {
+  const sessions = new Map();
+  let sequence = 0;
+  const handle = createFetchUploadHandler({
+    basePath: "/v1",
+    maxBatchBytes: 1024,
+    async createUpload(_request, spec) {
+      const upload = { id: `f${sequence += 1}`, size: spec.size, offset: 0, bytes: Buffer.alloc(spec.size) };
+      sessions.set(upload.id, upload);
+      return upload;
+    },
+    async resolveUpload(_request, id) {
+      const upload = sessions.get(id);
+      if (!upload) throw new UploadHttpError(404, "Missing.");
+      return upload;
+    },
+    async writePart(_request, upload, bytes, offset) { Buffer.from(bytes).copy(upload.bytes, offset); },
+    async completeUpload(_request, upload) { return { id: upload.id, text: upload.bytes.toString() }; },
+    async removeUpload(_request, upload) { sessions.delete(upload.id); },
+  });
+
+  const createdResponse = await handle(new Request("https://uploads.example/v1/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "portable.bin", size: 5, metadata: {} }),
+  }));
+  assert.equal(createdResponse.status, 201);
+  const created = await createdResponse.json();
+
+  const encoded = encodeBatch([{ id: created.id, offset: 0, length: 5, blob: new Blob(["hello"]) }]);
+  const batchResponse = await handle(new Request("https://uploads.example/v1/batches", {
+    method: "POST", body: encoded.body,
+  }));
+  assert.equal(batchResponse.status, 200);
+  assert.deepEqual(await batchResponse.json(), { offsets: { [created.id]: 5 } });
+
+  const completed = await handle(new Request(`https://uploads.example/v1/uploads/${created.id}/complete`, {
+    method: "POST",
+  }));
+  assert.equal(completed.status, 200);
+  assert.deepEqual(await completed.json(), { id: created.id, text: "hello" });
 });
