@@ -1,0 +1,63 @@
+# Custom routes and servers
+
+Use this setup when you already have a router, cannot mount an Express router, or need your own URL layout.
+
+## Browser routes
+
+Keep HTTP configuration in the transport and scheduling configuration in the client:
+
+```js
+import { createHttpTransport, createUploadClient } from "@itsgravix/muxload";
+
+const transport = createHttpTransport({
+  endpoint: "/api",
+  routes: {
+    create: "files/new",
+    batch: "files/data",
+    status: (ids) => `files/status?ids=${ids.map(encodeURIComponent).join(",")}`,
+    complete: (id) => `files/${encodeURIComponent(id)}/complete`,
+    remove: (id) => `files/${encodeURIComponent(id)}`,
+  },
+});
+
+const uploads = createUploadClient({ transport });
+```
+
+Route values may be full URLs, so individual operations can live on different services.
+
+## Connect your router
+
+```js
+import { createUploadService } from "@itsgravix/muxload/server";
+
+const mux = createUploadService({
+  createUpload,
+  resolveUpload,
+  writePart,
+  completeUpload,
+  removeUpload,
+});
+
+router.post("/files/new", async (req, res) => res.status(201).json(await mux.create(req, req.body)));
+router.post("/files/data", async (req, res) => res.json(await mux.batch(req, req.rawBody)));
+router.get("/files/status", async (req, res) => res.json(await mux.status(req, req.query.ids.split(","))));
+router.post("/files/:id/complete", async (req, res) => res.json(await mux.complete(req, req.params.id)));
+router.delete("/files/:id", async (req, res) => {
+  await mux.remove(req, req.params.id);
+  res.status(204).end();
+});
+```
+
+The batch route must give `mux.batch()` the raw binary request body. Do not parse it as JSON or text. Catch `UploadHttpError` in your normal error middleware and return its `status`, `message`, and optional `details`.
+
+## Storage contract
+
+| Callback | Responsibility |
+| --- | --- |
+| `createUpload(context, specification)` | Authenticate, create a record, and return `{ id, size, offset }`. |
+| `resolveUpload(context, id)` | Verify ownership and return the current record. |
+| `writePart(context, upload, bytes, offset)` | Store unchanged bytes at the exact offset. |
+| `completeUpload(context, upload)` | Validate or publish the finished file and return a result. |
+| `removeUpload(context, upload)` | Remove temporary bytes and the record. |
+
+Muxload handles decoding, bounds checks, duplicate pieces, offset reconciliation, and locking inside one service instance. Shared or multi-process storage must update offsets atomically.

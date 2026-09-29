@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createUploadClient } from "../src/client.js";
+import { createHttpUploadClient, createUploadClient } from "../src/client.js";
+
+test("the core client requires an explicit transport", () => {
+  assert.throws(() => createUploadClient(), /requires a transport/);
+  assert.throws(() => createHttpUploadClient(), /requires an endpoint/);
+});
 
 test("cancelling one file preserves the other file in a shared batch", async () => {
   let release;
@@ -54,7 +59,7 @@ test("custom route functions work without changing the client", async () => {
   };
 
   try {
-    const uploads = createUploadClient({
+    const uploads = createHttpUploadClient({
       endpoint: "https://uploads.example/v1",
       routes: {
         create: "files/new",

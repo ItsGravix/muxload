@@ -105,7 +105,10 @@ function retryDelay(attempt, delays) {
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export function createHttpTransport(options = {}) {
-  const endpoint = String(options.endpoint || "/api/mux-upload").replace(/\/$/, "");
+  if (typeof options.endpoint !== "string" || !options.endpoint.trim()) {
+    throw new TypeError("createHttpTransport() requires an endpoint.");
+  }
+  const endpoint = options.endpoint.replace(/\/$/, "");
   const configuredRoutes = options.routes ?? {};
   if (!configuredRoutes || typeof configuredRoutes !== "object" || Array.isArray(configuredRoutes)) {
     throw new TypeError("routes must be an object.");
@@ -147,7 +150,10 @@ export function createHttpTransport(options = {}) {
 }
 
 export function createUploadClient(options = {}) {
-  const transport = options.transport ?? createHttpTransport(options);
+  const transport = options.transport;
+  if (!transport) {
+    throw new TypeError("createUploadClient() requires a transport. Use createHttpUploadClient() for HTTP uploads.");
+  }
   for (const method of ["create", "batch", "status", "complete", "remove"]) {
     if (typeof transport[method] !== "function") throw new TypeError(`transport.${method} must be a function.`);
   }
@@ -441,4 +447,8 @@ export function createUploadClient(options = {}) {
       };
     },
   };
+}
+
+export function createHttpUploadClient(options = {}) {
+  return createUploadClient({ ...options, transport: createHttpTransport(options) });
 }

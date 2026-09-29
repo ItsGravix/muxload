@@ -1,6 +1,6 @@
 {
   "name": "@itsgravix/muxload",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "JavaScript library for resumable, chunked, concurrent large-file uploads from browsers to Node.js, Express, serverless, Fetch, or custom HTTP backends.",
   "type": "module",
   "license": "MIT",
@@ -14,6 +14,7 @@
   },
   "files": [
     "src",
+    "docs",
     "README.md",
     "LICENSE"
   ],
