@@ -19,7 +19,7 @@ npm install github:ItsGravix/muxload
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/muxload#v0.6.0
+npm install github:ItsGravix/muxload#v0.7.0
 ```
 
 ## Get started with Express
@@ -87,6 +87,14 @@ Keep one client for the page. Each selected file joins its scheduler, including 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
 ## More control
+
+### Choose how files are stored
+
+Saving to a folder is optional. Pass `createMemoryStorage()` to keep files in RAM, or provide your own `storage` callbacks to receive byte ranges, write to a custom filesystem, process completed files, or notify another backend. These work with the Express router, Fetch handler, and standalone upload service. The browser code stays the same.
+
+See [custom storage and memory uploads](docs/guides/custom-storage.md) for examples, callback contracts, and memory limits.
+
+### Customize how the browser sends files
 
 Configure the HTTP layer separately when you need custom URLs, headers, authentication, or a partly customized transport:
 
