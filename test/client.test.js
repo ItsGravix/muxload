@@ -2,49 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createUploadClient } from "../src/client.js";
 
-test("the client requires an endpoint or request callbacks", () => {
-  assert.throws(() => createUploadClient(), /endpoint or request callbacks/);
+test("the client requires an endpoint", () => {
+  assert.throws(() => createUploadClient(), /non-empty endpoint/);
   assert.throws(() => createUploadClient({ endpoint: "" }), /non-empty endpoint/);
-});
-
-test("an endpoint can use a custom callback for one request", async () => {
-  const uploads = createUploadClient({
-    endpoint: "https://uploads.example/v1",
-    async createUpload() { return { id: "custom", offset: 0 }; },
-    async completeUpload(id) { return { id, complete: true }; },
-  });
-  assert.deepEqual(await uploads.upload(new Blob([])), { id: "custom", complete: true });
-});
-
-test("cancelling one file preserves the other file in a shared batch", async () => {
-  let release;
-  const gate = new Promise((resolve) => { release = resolve; });
-  let started;
-  const entered = new Promise((resolve) => { started = resolve; });
-  let sequence = 0;
-  const ids = [];
-  const removed = [];
-  const client = createUploadClient({
-    prepare: () => Promise.resolve(),
-    onEvent(event) { if (event.type === "created") ids.push(event.id); },
-    async createUpload() { return { id: String(++sequence), offset: 0 }; },
-    async sendParts(entries) {
-        started(); await gate;
-        return { offsets: Object.fromEntries(entries.map((entry) => [entry.id, entry.offset + entry.length])) };
-    },
-    async getUploadStatus() { return { offsets: {} }; },
-    async completeUpload(id) { return { id }; },
-    async cancelUpload(id) { removed.push(id); },
-  });
-  const first = client.upload(new Blob(["one"]));
-  const rejected = assert.rejects(first, { name: "AbortError" });
-  const second = client.upload(new Blob(["two"]));
-  await entered;
-  client.cancel(ids[0]);
-  release();
-  await rejected;
-  assert.deepEqual(await second, { id: ids[1] });
-  assert.deepEqual(removed, [ids[0]]);
 });
 
 test("custom route functions work without changing the client", async () => {

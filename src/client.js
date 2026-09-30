@@ -104,7 +104,7 @@ function retryDelay(attempt, delays) {
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-function createHttpCallbacks(options = {}) {
+function createHttpRequests(options = {}) {
   if (typeof options.endpoint !== "string" || !options.endpoint.trim()) {
     throw new TypeError("createUploadClient() requires a non-empty endpoint.");
   }
@@ -150,17 +150,7 @@ function createHttpCallbacks(options = {}) {
 }
 
 export function createUploadClient(options = {}) {
-  const callbackNames = ["createUpload", "sendParts", "getUploadStatus", "completeUpload", "cancelUpload"];
-  const usesEndpoint = options.endpoint !== undefined;
-  const callbacks = usesEndpoint
-    ? { ...createHttpCallbacks(options), ...Object.fromEntries(callbackNames.filter((name) => options[name] !== undefined).map((name) => [name, options[name]])) }
-    : options;
-  if (!usesEndpoint && !callbackNames.some((name) => options[name] !== undefined)) {
-    throw new TypeError("createUploadClient() requires an endpoint or request callbacks.");
-  }
-  for (const name of callbackNames) {
-    if (typeof callbacks[name] !== "function") throw new TypeError(`${name} must be a function.`);
-  }
+  const requests = createHttpRequests(options);
   const event = (type, record, extra = {}) => { try { options.onEvent?.({ type, id: record?.id, ...extra }); } catch {} };
   const minBatchBytes = clampInteger(options.minBatchBytes ?? 128 * KiB, 16 * KiB, 100 * MiB, "minBatchBytes");
   const maxBatchBytes = clampInteger(options.maxBatchBytes ?? 4 * MiB, minBatchBytes, 100 * MiB, "maxBatchBytes");
@@ -239,7 +229,7 @@ export function createUploadClient(options = {}) {
   const reconcile = async (entries) => {
     const ids = entries.map((entry) => entry.id);
     try {
-      const payload = await callbacks.getUploadStatus(ids);
+      const payload = await requests.getUploadStatus(ids);
       for (const entry of entries) {
         const confirmed = payload.offsets?.[entry.id];
         if (Number.isSafeInteger(confirmed) && confirmed >= entry.record.offset && confirmed <= entry.record.size) {
@@ -258,7 +248,7 @@ export function createUploadClient(options = {}) {
     record.finishing = true;
     for (let attempt = 0; !record.cancelled; attempt += 1) {
       try {
-        const result = await callbacks.completeUpload(record.id);
+        const result = await requests.completeUpload(record.id);
         if (record.cancelled) return;
         record.settled = true;
         record.finishing = false;
@@ -296,7 +286,7 @@ export function createUploadClient(options = {}) {
     const startedAt = performance.now();
     let succeeded = false;
     try {
-      const result = await callbacks.sendParts(entries.map(({ id, offset, length, blob }) => ({ id, offset, length, blob })), {
+      const result = await requests.sendParts(entries.map(({ id, offset, length, blob }) => ({ id, offset, length, blob })), {
         onProgress: (loaded) => distributeProgress(entries, loaded),
       });
       for (const entry of entries) {
@@ -360,7 +350,7 @@ export function createUploadClient(options = {}) {
     if (record.removing || record.settled || record.inFlight) return;
     record.removing = true;
     try {
-      if (record.id) await callbacks.cancelUpload(record.id);
+      if (record.id) await requests.cancelUpload(record.id);
     } catch {
       // Cancellation is local-first. Server cleanup may also expire abandoned sessions.
     } finally {
@@ -396,7 +386,7 @@ export function createUploadClient(options = {}) {
 
     try {
       await prepare();
-      const created = await callbacks.createUpload({
+      const created = await requests.createUpload({
           name: file.name || "upload.bin",
           size: file.size,
           type: file.type || "application/octet-stream",

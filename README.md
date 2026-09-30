@@ -4,7 +4,7 @@ Parcelweave is a JavaScript library for reliable, resumable, concurrent large-fi
 
 It is built to keep uploads moving on slow or unstable internet connections. Parcelweave adapts request sizes, detects real transmission stalls, retries failures, and resumes from the last server-confirmed byte instead of restarting the file. This makes it especially effective under stressful network conditions, while still allowing it to scale up and take advantage of available bandwidth when the connection is stable.
 
-Parcelweave works with ordinary HTTP through any Node.js server, serverless and Fetch-compatible runtimes, or custom routers. Express is included as the easiest complete example. For Socket.IO or another connection, provide request callbacks while Parcelweave continues to handle scheduling, retries, and progress.
+Parcelweave works with ordinary HTTP through any Node.js server, serverless and Fetch-compatible runtimes, or custom routers. Express is included as the easiest complete example. Give the browser client your upload URL and Parcelweave handles the requests, scheduling, retries, resume, and progress.
 
 Parcelweave sends the original bytes. It does not compress, convert, base64-encode, or reduce file quality.
 
@@ -19,12 +19,12 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.15.0
+npm install github:ItsGravix/parcelweave#v0.16.0
 ```
 
 ## Optional quick start: Express
 
-This section shows one ready-made setup if you use Express. It is not required to use Parcelweave. For another server or infrastructure, go to the [custom server guide](docs/guides/custom-router.md), [Fetch and serverless guide](docs/guides/serverless-fetch.md), or [custom request guide](docs/guides/custom-requests.md).
+This section shows one ready-made setup if you use Express. It is not required to use Parcelweave. For another server or infrastructure, go to the [custom server guide](docs/guides/custom-router.md) or [Fetch and serverless guide](docs/guides/serverless-fetch.md).
 
 
 ### 1. Add uploads to your Express server
@@ -165,16 +165,15 @@ Handle uploaded data directly with your own functions. `createUpload` can save a
 
 Pass these functions directly to the Express router, Fetch handler, or standalone upload service. The browser code stays the same. See [custom byte and completion handlers](docs/guides/custom-storage.md) for the complete setup, including using your own streams.
 
-### Advanced networking
+### Custom URLs and authentication
 
-`createUploadClient()` handles HTTP when you give it an `endpoint`. For Socket.IO or another connection, give it request callbacks instead. See [use your own requests](docs/guides/custom-requests.md).
+The browser client handles its HTTP requests internally. Set `endpoint` to the upload URL, then use its `headers`, `credentials`, and `routes` options when your API needs authentication or different route paths. See [custom routes and servers](docs/guides/custom-router.md).
 
 Choose the guide that matches your application:
 
 - [Express and local disk](docs/guides/express-local-disk.md) — the shortest complete setup.
 - [Custom routes and servers](docs/guides/custom-router.md) — connect Parcelweave to an existing router or unusual URL layout.
 - [Serverless and Fetch runtimes](docs/guides/serverless-fetch.md) — use standard `Request` and `Response` objects.
-- [Custom requests](docs/guides/custom-requests.md) — connect Socket.IO or your own request system.
 
 ## What Parcelweave handles
 
@@ -193,8 +192,7 @@ Create one client and reuse it for every file. Every `upload()` call joins the s
 
 | API | Use it when |
 | --- | --- |
-| `createUploadClient({ endpoint, ...options })` | Upload through Parcelweave's built-in HTTP requests. |
-| `createUploadClient({ createUpload, sendParts, ...options })` | Upload through Socket.IO or your own request functions. |
+| `createUploadClient({ endpoint, ...options })` | Upload files from the browser. Parcelweave handles the HTTP requests. |
 | `createExpressUploadRouter(options)` | You want ready-made routes inside an existing Express app. |
 | `createFetchUploadHandler(options)` | Your runtime uses web-standard `Request` and `Response`. |
 | `createUploadService(options)` | You want to connect the protocol engine to your own router. |

@@ -1,27 +1,4 @@
-import { decodeBatch, encodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
-
-/** Create client request callbacks for a service in the same process. */
-export function createServiceCallbacks(service, { context } = {}) {
-  for (const method of ["create", "batch", "status", "complete", "remove"]) {
-    if (typeof service?.[method] !== "function") throw new TypeError(`service.${method} must be a function.`);
-  }
-  const getContext = () => typeof context === "function" ? context() : context;
-  return {
-    async createUpload(specification, { signal } = {}) {
-      signal?.throwIfAborted();
-      return service.create(await getContext(), specification);
-    },
-    async sendParts(pieces, { onProgress } = {}) {
-      const encoded = encodeBatch(pieces);
-      const result = await service.batch(await getContext(), await encoded.body.arrayBuffer());
-      onProgress?.(encoded.payloadBytes);
-      return result;
-    },
-    async getUploadStatus(ids) { return service.status(await getContext(), ids); },
-    async completeUpload(id) { return service.complete(await getContext(), id); },
-    async cancelUpload(id) { return service.remove(await getContext(), id); },
-  };
-}
+import { decodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
 
 const CREATE_BODY_LIMIT = 32 * 1024;
 const MAX_BATCH_BYTES_LIMIT = 100 * 1024 * 1024;
