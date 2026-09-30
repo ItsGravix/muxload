@@ -30,26 +30,13 @@ Express is optional. This example adds uploads to an Express server. For another
 
 ```js
 import express from "express";
-import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
+import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
 import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
 const app = express();
 
 // Parcelweave: choose where files are saved and add the upload routes.
-const storage = createStorageContainer({
-  directory: "./uploads",
-  // Optional: check the declared filename before receiving any bytes.
-  async validate(_request, file) {
-    if (!file.name.toLowerCase().endsWith(".txt")) {
-      throw new UploadHttpError(415, "Only .txt filenames are allowed.");
-    }
-  },
-  // Optional: the complete file is now saved at upload.path.
-  async finalize(_request, upload) {
-    console.log("File received:", upload.path);
-    return { id: upload.id, name: upload.name }; // Returned to the browser.
-  },
-});
+const storage = createStorageContainer({ directory: "./uploads" });
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 
 app.listen(3000);
@@ -95,6 +82,31 @@ document.querySelector("#files").addEventListener("change", (event) => {
 The browser client handles requests, progress, retries, and resume. Your server receives and stores the bytes.
 
 For a separate upload server, use its full URL as `endpoint` and configure CORS there. In local development, a frontend proxy can forward `/api/uploads` to Express.
+
+### Optional: validate and finalize uploads
+
+To add checks or handle completed files, replace the server's `storage` setup with:
+
+```js
+import { UploadHttpError } from "@itsgravix/parcelweave/server";
+
+const storage = createStorageContainer({
+  directory: "./uploads",
+  async validate(_request, file) {
+    // Check the declared filename before receiving any bytes.
+    if (!file.name.toLowerCase().endsWith(".txt")) {
+      throw new UploadHttpError(415, "Only .txt filenames are allowed.");
+    }
+  },
+  async finalize(_request, upload) {
+    // The complete file is now saved at upload.path.
+    console.log("File received:", upload.path);
+    return { id: upload.id, name: upload.name }; // Returned to the browser.
+  },
+});
+```
+
+Both hooks are optional. See the [file handling examples](docs/examples/file-handling.md) for reading or processing the completed file.
 
 ## Customize what you need
 
