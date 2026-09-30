@@ -68,9 +68,9 @@ app.use(express.json());
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
-  // Optional: remove validate() if you accept every file type.
-  validate: async (_request, file) => {
-    if (!file.name.toLowerCase().endsWith(".txt")) {
+  // Optional: runs once before Parcelweave accepts any file bytes.
+  validate: async (_request, uploadInfo) => {
+    if (!uploadInfo.name.toLowerCase().endsWith(".txt")) {
       throw new UploadHttpError(415, "Only text files are allowed.");
     }
   },
@@ -111,6 +111,8 @@ app.listen(3000, () => {
 ```
 
 `directory` is required only when you choose `createLocalStorage()`. That adapter creates the directory when the first file arrives and writes incoming bytes to `uploads/<upload-id>/data`. The example `finalize()` reads and modifies the completed file through a backpressured Node pipeline, then atomically replaces the original. It never loads the whole file into memory. You can omit that hook to leave the file untouched. The adapter's `maxFileBytes` and `validate` options are also optional.
+
+`validate(request, uploadInfo)` runs once when the browser asks to start an upload—before the upload directory is created and before Parcelweave accepts the first byte. `uploadInfo` contains the client-declared `name`, `size`, and `metadata`, so this hook is useful for limits, permissions, and preliminary checks. It does not receive file contents. Inspect actual bytes in `finalize()` after the complete file arrives, or provide a custom `writePart()` if you need incremental inspection while pieces arrive.
 
 Parcelweave itself does not require a directory, local disk, or this adapter. You can pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router instead. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
 

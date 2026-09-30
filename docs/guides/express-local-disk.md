@@ -46,8 +46,9 @@ import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3,
-  validate: async (_request, file) => {
-    if (!file.name.toLowerCase().endsWith(".txt")) {
+  // Runs once before any file bytes are accepted.
+  validate: async (_request, uploadInfo) => {
+    if (!uploadInfo.name.toLowerCase().endsWith(".txt")) {
       throw new UploadHttpError(415, "Only text files are allowed.");
     }
   },
@@ -72,6 +73,8 @@ app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 ```
 
 Incoming files are saved as `uploads/<id>/data`. `finalize` runs only after the full file has arrived; `upload.createReadStream()` reads it with Node stream backpressure instead of buffering the full file. The original name stays in the upload record. Use one local-storage service instance per directory in a single Node.js process. For multiple server processes, use shared storage with atomic offset updates instead.
+
+`validate(request, uploadInfo)` runs once before the adapter creates the upload directory or accepts file bytes. It can check the declared `name`, `size`, and `metadata`, but it cannot inspect content. Use `finalize()` to inspect the fully received file, or custom `writePart()` callbacks for incremental byte inspection.
 
 The browser side still owns its original `File` or `Blob`; call its native `stream()` method when client code needs to inspect it. The backend stream is separate and reads the fully received server-side copy. Neither Parcelweave API eagerly duplicates the whole file in memory.
 
