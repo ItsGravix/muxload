@@ -155,13 +155,28 @@ document.querySelector("#files").addEventListener("change", (event) => {
 });
 ```
 
-On the client, Parcelweave accepts the browser's native `File` or `Blob`. Your code keeps direct access to it, and `onProgress` receives it as `file`. You can read it with the browser's built-in `file.stream()` before or during the upload. Browser files are immutable; to change the uploaded bytes, create a new `File` or `Blob` and pass that value to `upload()`.
+### Important setup details
 
-On the backend, the storage container calls `finalize()` only after every byte has been received and confirmed. Its `upload.createReadStream()` opens a fresh Node readable stream for the completed server-side file. The stream is created only when called, reads bounded chunks with backpressure, and does not load the entire file into memory.
+#### Reuse one client
 
-`endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
+Create the upload client once and use it for every file. Files using the same client can share the connection and be coordinated together. Separate clients upload independently.
 
-**IMPORTANT!** Use one upload client for all files. Parcelweave can only coordinate uploads that share a client. Separate clients still work, but their uploads compete for bandwidth and may fail on certain configurations.
+#### Match the endpoint
+
+`endpoint` is the URL where your server receives uploads. It should match the path used by `app.use()`:
+
+```js
+app.use("/api/uploads", router);
+const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
+```
+
+For an upload server on another origin, use its full URL and configure CORS and authentication there.
+
+#### Access file contents
+
+The browser gives you a normal `File` or `Blob`, and `onProgress` returns the same value as `file`.
+
+If you use the optional local-disk adapter, `finalize()` runs after the complete file arrives. `upload.createReadStream()` then lets you read it in small pieces without loading the whole file into memory. Custom storage handlers can provide their own way to read completed files.
 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
