@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -59,7 +59,7 @@ test("endpoint-free transport resumes a committed batch after response loss and 
     assert.equal(client.getState().activeUploads, 1);
     assert.equal(client.resume(pausedId), true);
     const result = await first;
-    assert.deepEqual(new Uint8Array(await readFile(path.join(directory, result.id, "data"))), bytes);
+    assert.deepEqual(new Uint8Array(await readFile(path.join(directory, result.id))), bytes);
     assert.equal(finalizedReads.get(result.id).bytesRead, bytes.length);
     assert.ok(finalizedReads.get(result.id).largestChunk <= 32 * 1024);
     assert.equal(finalizedReads.get(result.id).hash, createHash("sha256").update(bytes).digest("hex"));
@@ -67,11 +67,9 @@ test("endpoint-free transport resumes a committed batch after response loss and 
     assert.equal(finalizedReads.get(second.id).hash, createHash("sha256").update("second").digest("hex"));
     assert.equal(events.filter((event) => event.type === "complete").length, 2);
     assert.ok(events.some((event) => event.type === "retry"));
-    const restarted = createUploadService({ storage: createStorageContainer({ directory }) });
-    assert.deepEqual(await restarted.status(undefined, [result.id]), { offsets: { [result.id]: bytes.length } });
-    assert.deepEqual(await restarted.status({ any: "context" }, [second.id]), { offsets: { [second.id]: 6 } });
-    assert.deepEqual(await restarted.complete(undefined, result.id), result);
-    const record = JSON.parse(await readFile(path.join(directory, result.id, "record.json"), "utf8"));
-    assert.equal("owner" in record, false);
+    assert.deepEqual((await readdir(directory)).sort(), [result.id, second.id].sort());
+    assert.deepEqual(await service.status(undefined, [result.id]), { offsets: { [result.id]: bytes.length } });
+    assert.deepEqual(await service.status({ any: "context" }, [second.id]), { offsets: { [second.id]: 6 } });
+    assert.deepEqual(await service.complete(undefined, result.id), result);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

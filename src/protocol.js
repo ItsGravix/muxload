@@ -5,6 +5,15 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 export const BATCH_CONTENT_TYPE = "application/vnd.parcelweave.batch";
+export const MAX_UPLOAD_ID_LENGTH = 200;
+const UPLOAD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._~-]*$/;
+
+export function normalizeUploadId(value) {
+  if (typeof value !== "string" || !value || value.length > MAX_UPLOAD_ID_LENGTH || !UPLOAD_ID_PATTERN.test(value)) {
+    throw new TypeError("Upload ids must be URL-safe strings of 1 to 200 characters.");
+  }
+  return value;
+}
 
 function assertSafeNonNegativeInteger(value, label) {
   if (!Number.isSafeInteger(value) || value < 0) {
@@ -13,12 +22,10 @@ function assertSafeNonNegativeInteger(value, label) {
 }
 
 function normalizeEntry(entry) {
-  if (!entry || typeof entry.id !== "string" || !entry.id) {
-    throw new TypeError("Each batch entry needs a non-empty id.");
-  }
+  if (!entry) throw new TypeError("Each batch entry needs an id.");
   assertSafeNonNegativeInteger(entry.offset, "entry.offset");
   assertSafeNonNegativeInteger(entry.length, "entry.length");
-  return { id: entry.id, offset: entry.offset, length: entry.length };
+  return { id: normalizeUploadId(entry.id), offset: entry.offset, length: entry.length };
 }
 
 export function encodeBatch(entries) {

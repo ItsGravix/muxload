@@ -59,7 +59,9 @@ const storage = createStorageContainer({
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 ```
 
-Incoming files are saved as `uploads/<id>/data`. `finalize` runs only after the full file has arrived; `upload.createReadStream()` reads it with Node stream backpressure instead of buffering the full file. The original name stays in the upload record. Use one local-storage service instance per directory in a single Node.js process. For multiple server processes, use shared storage with atomic offset updates instead.
+Incoming bytes are saved as one file at `uploads/<id>`. No metadata or JSON sidecar files are written to the upload directory. `finalize` runs only after the full file has arrived; `upload.createReadStream()` reads it with Node stream backpressure instead of buffering the full file.
+
+By default, upload names, metadata, offsets, and completion results are kept in memory. Network retries and resume work while that server process is running. To resume after restarts, pass a `state` object whose asynchronous `get(id)`, `set(upload)`, and `delete(id)` functions use your database or cache. For multiple server processes, that shared state and your byte destination must enforce atomic offset updates. If this adapter does not fit your application, use the custom storage callbacks instead.
 
 `validate(request, uploadInfo)` runs once before the adapter creates the upload directory or accepts file bytes. It can check the declared `name`, `size`, and `metadata`, but it cannot inspect content. Use `finalize()` to inspect the fully received file, or custom `writePart()` callbacks for incremental byte inspection.
 

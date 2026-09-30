@@ -1,4 +1,7 @@
-import { decodeBatch, BATCH_CONTENT_TYPE } from "./protocol.js";
+import { decodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
+
+const CREATE_BODY_LIMIT = 32 * 1024;
+const MAX_BATCH_BYTES_LIMIT = 100 * 1024 * 1024;
 
 export class UploadHttpError extends Error {
   constructor(status, message, details) {
@@ -34,12 +37,28 @@ class KeyedLock {
   }
 }
 
-const asHttpError = (error) => Number.isInteger(error?.status)
-  ? error
-  : new UploadHttpError(500, "The upload server could not process the request.");
+const asHttpError = (error) => {
+  if (error instanceof UploadHttpError) {
+    return error.status >= 500 ? new UploadHttpError(500, "The upload server could not process the request.") : error;
+  }
+  if (Number.isInteger(error?.status) && error.status >= 400 && error.status < 500) {
+    return new UploadHttpError(error.status, String(error.message || "The upload request was rejected."));
+  }
+  return new UploadHttpError(500, "The upload server could not process the request.");
+};
+
+const offsetObject = (entries) => Object.fromEntries(entries);
+
+function requestUploadId(value) {
+  try { return normalizeUploadId(value); }
+  catch { throw new UploadHttpError(400, "Invalid upload id."); }
+}
 
 function validateUpload(upload, id) {
-  if (!upload || upload.id !== id) throw new UploadHttpError(404, "Upload session not found.");
+  let normalizedId;
+  try { normalizedId = normalizeUploadId(id); }
+  catch { throw new UploadHttpError(404, "Upload session not found."); }
+  if (!upload || upload.id !== normalizedId) throw new UploadHttpError(404, "Upload session not found.");
   if (!Number.isSafeInteger(upload.size) || upload.size < 0) throw new TypeError("resolveUpload() returned an invalid size.");
   if (!Number.isSafeInteger(upload.offset) || upload.offset < 0 || upload.offset > upload.size) {
     throw new TypeError("resolveUpload() returned an invalid offset.");
@@ -51,7 +70,9 @@ function validateSpecification(specification) {
   if (!specification || typeof specification.name !== "string" || !specification.name
     || !Number.isSafeInteger(specification.size) || specification.size < 0
     || typeof specification.metadata !== "object" || specification.metadata === null
-    || Array.isArray(specification.metadata)) {
+    || Array.isArray(specification.metadata)
+    || specification.name.length > 1024
+    || specification.type !== undefined && (typeof specification.type !== "string" || specification.type.length > 255)) {
     throw new UploadHttpError(400, "Invalid upload specification.");
   }
   return specification;
@@ -61,7 +82,8 @@ function validateSpecification(specification) {
  * Framework-neutral protocol engine. The application supplies lifecycle/storage
  * callbacks; Parcelweave owns validation, locking, offsets and retry semantics.
  */
-export function createUploadService(options) {
+export function createUploadService(options = {}) {
+  if (!options || typeof options !== "object") throw new TypeError("Upload service options are required.");
   const callbacks = { ...options.storage, ...options };
   const { createUpload, resolveUpload, writePart, completeUpload, removeUpload } = callbacks;
   for (const [name, value] of Object.entries({ createUpload, resolveUpload, writePart, completeUpload, removeUpload })) {
@@ -69,6 +91,12 @@ export function createUploadService(options) {
   }
   const maxBatchBytes = options.maxBatchBytes ?? 4 * 1024 * 1024;
   const maxEntries = options.maxEntries ?? 64;
+  if (!Number.isSafeInteger(maxBatchBytes) || maxBatchBytes < 1 || maxBatchBytes > MAX_BATCH_BYTES_LIMIT) {
+    throw new TypeError("maxBatchBytes must be between 1 byte and 100 MiB.");
+  }
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1 || maxEntries > 256) {
+    throw new TypeError("maxEntries must be between 1 and 256.");
+  }
   const locks = new KeyedLock();
 
   return {
@@ -77,7 +105,8 @@ export function createUploadService(options) {
 
     async create(context, specification) {
       const upload = await createUpload(context, validateSpecification(specification));
-      validateUpload(upload, upload?.id);
+      const id = normalizeUploadId(upload?.id);
+      validateUpload(upload, id);
       return { id: upload.id, offset: upload.offset };
     },
 
@@ -100,7 +129,7 @@ export function createUploadService(options) {
         for (const entry of decoded.entries) {
           const upload = resolved.get(entry.id);
           if (entry.offset > upload.offset || entry.offset < upload.offset && entry.offset + entry.length > upload.offset) {
-            const offsets = Object.fromEntries([...resolved].map(([id, value]) => [id, value.offset]));
+            const offsets = offsetObject([...resolved].map(([id, value]) => [id, value.offset]));
             throw new UploadHttpError(409, "Upload offsets no longer match.", { offsets });
           }
           if (entry.offset + entry.length > upload.size) throw new UploadHttpError(400, "A part exceeds its file size.");
@@ -111,7 +140,7 @@ export function createUploadService(options) {
           await writePart(context, upload, entry.bytes, entry.offset);
           upload.offset = entry.offset + entry.length;
         }
-        return { offsets: Object.fromEntries([...resolved].map(([id, upload]) => [id, upload.offset])) };
+        return { offsets: offsetObject([...resolved].map(([id, upload]) => [id, upload.offset])) };
       });
     },
 
@@ -119,22 +148,29 @@ export function createUploadService(options) {
       if (!Array.isArray(ids) || !ids.length || ids.length > maxEntries) {
         throw new UploadHttpError(400, "Provide one or more upload ids.");
       }
-      const offsets = {};
-      for (const id of ids) offsets[id] = validateUpload(await resolveUpload(context, id), id).offset;
+      const offsets = offsetObject([]);
+      for (const id of ids) {
+        let safeId;
+        try { safeId = normalizeUploadId(id); }
+        catch { throw new UploadHttpError(400, "Invalid upload id."); }
+        offsets[safeId] = validateUpload(await resolveUpload(context, safeId), safeId).offset;
+      }
       return { offsets };
     },
 
     async complete(context, id) {
-      return locks.run([id], async () => {
-        const upload = validateUpload(await resolveUpload(context, id), id);
+      const safeId = requestUploadId(id);
+      return locks.run([safeId], async () => {
+        const upload = validateUpload(await resolveUpload(context, safeId), safeId);
         if (upload.offset !== upload.size) throw new UploadHttpError(409, "Upload is not complete.", { offset: upload.offset });
-        return await completeUpload(context, upload) ?? { id, complete: true };
+        return await completeUpload(context, upload) ?? { id: safeId, complete: true };
       });
     },
 
     async remove(context, id) {
-      await locks.run([id], async () => {
-        const upload = validateUpload(await resolveUpload(context, id), id);
+      const safeId = requestUploadId(id);
+      await locks.run([safeId], async () => {
+        const upload = validateUpload(await resolveUpload(context, safeId), safeId);
         await removeUpload(context, upload);
       });
     },
@@ -147,9 +183,13 @@ const jsonResponse = (payload, status = 200, headers) => new Response(JSON.strin
 });
 
 async function readLimitedBody(request, maximumBytes) {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null && Number(declaredLength) > maximumBytes) {
+    throw new UploadHttpError(413, "Request body is too large.");
+  }
   if (!request.body?.getReader) {
     const bytes = new Uint8Array(await request.arrayBuffer());
-    if (bytes.byteLength > maximumBytes) throw new UploadHttpError(413, "Upload batch is too large.");
+    if (bytes.byteLength > maximumBytes) throw new UploadHttpError(413, "Request body is too large.");
     return bytes;
   }
   const reader = request.body.getReader();
@@ -160,7 +200,7 @@ async function readLimitedBody(request, maximumBytes) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > maximumBytes) throw new UploadHttpError(413, "Upload batch is too large.");
+      if (total > maximumBytes) throw new UploadHttpError(413, "Request body is too large.");
       chunks.push(value);
     }
   } finally {
@@ -170,6 +210,19 @@ async function readLimitedBody(request, maximumBytes) {
   let offset = 0;
   for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
   return body;
+}
+
+const mediaType = (request) => (request.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+
+async function readJson(request, maximumBytes) {
+  if (mediaType(request) !== "application/json") throw new UploadHttpError(415, "Use application/json.");
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(request, maximumBytes));
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof UploadHttpError) throw error;
+    throw new UploadHttpError(400, "Invalid JSON request body.");
+  }
 }
 
 /**
@@ -191,10 +244,10 @@ export function createFetchUploadHandler(options) {
       const completeMatch = path.match(/^\/uploads\/([^/]+)\/complete$/);
 
       if (request.method === "POST" && path === "/uploads") {
-        return jsonResponse(await service.create(context, await request.json()), 201, responseHeaders);
+        return jsonResponse(await service.create(context, await readJson(request, CREATE_BODY_LIMIT)), 201, responseHeaders);
       }
       if (request.method === "POST" && path === "/batches") {
-        if (!(request.headers.get("content-type") || "").toLowerCase().startsWith(BATCH_CONTENT_TYPE)) {
+        if (mediaType(request) !== BATCH_CONTENT_TYPE) {
           throw new UploadHttpError(415, `Use ${BATCH_CONTENT_TYPE}.`);
         }
         const length = Number(request.headers.get("content-length"));
@@ -209,18 +262,16 @@ export function createFetchUploadHandler(options) {
         return jsonResponse(await service.status(context, ids), 200, responseHeaders);
       }
       if (request.method === "POST" && completeMatch) {
-        return jsonResponse(await service.complete(context, decodeURIComponent(completeMatch[1])), 200, responseHeaders);
+        return jsonResponse(await service.complete(context, requestUploadId(decodeURIComponent(completeMatch[1]))), 200, responseHeaders);
       }
       if (request.method === "DELETE" && uploadMatch) {
-        await service.remove(context, decodeURIComponent(uploadMatch[1]));
+        await service.remove(context, requestUploadId(decodeURIComponent(uploadMatch[1])));
         return new Response(null, { status: 204, headers: responseHeaders });
       }
       return jsonResponse({ error: "Parcelweave route not found." }, 404, responseHeaders);
     } catch (error) {
-      const safe = error instanceof SyntaxError || error instanceof TypeError
-        ? new UploadHttpError(400, error.message)
-        : asHttpError(error);
-      return jsonResponse({ error: safe.message, ...safe.details }, safe.status, responseHeaders);
+      const safe = asHttpError(error);
+      return jsonResponse({ ...safe.details, error: safe.message }, safe.status, responseHeaders);
     }
   };
 }
@@ -232,8 +283,8 @@ export function createExpressUploadRouter(options) {
   const service = createUploadService(options);
   const router = express.Router();
   const sendError = (response, error) => {
-    const safe = error instanceof TypeError ? new UploadHttpError(400, error.message) : asHttpError(error);
-    response.status(safe.status).json({ error: safe.message, ...safe.details });
+    const safe = asHttpError(error);
+    response.status(safe.status).json({ ...safe.details, error: safe.message });
   };
 
   router.post("/uploads", express.json({ limit: "32kb" }), async (request, response) => {

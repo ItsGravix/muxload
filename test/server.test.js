@@ -136,3 +136,48 @@ test("custom service reports malformed protocol bodies as public 400 errors", as
     (error) => error instanceof UploadHttpError && error.status === 400,
   );
 });
+
+test("portable handler bounds JSON bodies and rejects lookalike content types", async () => {
+  const callbacks = {
+    async createUpload(_request, spec) { return { id: "safe-id", size: spec.size, offset: 0 }; },
+    async resolveUpload() { return { id: "safe-id", size: 0, offset: 0 }; },
+    async writePart() {}, async completeUpload() {}, async removeUpload() {},
+  };
+  const handle = createFetchUploadHandler(callbacks);
+  const oversized = await handle(new Request("https://example.test/uploads", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "x", size: 0, metadata: { padding: "x".repeat(40_000) } }),
+  }));
+  assert.equal(oversized.status, 413);
+
+  const wrongType = await handle(new Request("https://example.test/batches", {
+    method: "POST", headers: { "Content-Type": "application/vnd.parcelweave.batchx" }, body: "x",
+  }));
+  assert.equal(wrongType.status, 415);
+});
+
+test("invalid upload ids never reach application storage callbacks", async () => {
+  let resolutions = 0;
+  const service = createUploadService({
+    async createUpload() { return { id: "../../escape", size: 0, offset: 0 }; },
+    async resolveUpload() { resolutions += 1; },
+    async writePart() {}, async completeUpload() {}, async removeUpload() {},
+  });
+  await assert.rejects(service.create({}, { name: "x", size: 0, metadata: {} }), { name: "TypeError" });
+  await assert.rejects(service.complete({}, "../../escape"), { status: 400 });
+  await assert.rejects(service.remove({}, "a/b"), { status: 400 });
+  assert.equal(resolutions, 0);
+});
+
+test("internal callback errors are not exposed to HTTP clients", async () => {
+  const handle = createFetchUploadHandler({
+    async createUpload() { throw new TypeError("secret implementation detail"); },
+    async resolveUpload() {}, async writePart() {}, async completeUpload() {}, async removeUpload() {},
+  });
+  const response = await handle(new Request("https://example.test/uploads", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "x", size: 0, metadata: {} }),
+  }));
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "The upload server could not process the request." });
+});

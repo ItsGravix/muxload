@@ -19,7 +19,7 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.12.0
+npm install github:ItsGravix/parcelweave#v0.13.0
 ```
 
 ## Optional quick start: Express
@@ -91,13 +91,15 @@ app.listen(3000, () => {
 });
 ```
 
-Folder creation is an optional feature provided by `createStorageContainer()`. Give it one base directory, such as `./uploads`; it automatically creates that directory and a separate subfolder for every accepted upload. The file bytes are saved at `uploads/<upload-id>/data`, while Parcelweave's upload record is kept beside them. You do not need to create these folders yourself. The `validate` and `finalize` options are optional.
+Folder creation is an optional feature provided by `createStorageContainer()`. Give it one base directory, such as `./uploads`, and it creates that directory when the first upload starts. Each upload is stored as one file named with its random upload ID. Parcelweave does not place metadata or JSON sidecar files in that folder. The `validate` and `finalize` options are optional.
+
+The simple adapter keeps offsets and upload metadata in memory, separately from the files. It resumes interrupted requests while the server process is running. If uploads must also resume after a server restart, provide the optional `state` adapter backed by your database or cache. Applications with their own storage can skip `createStorageContainer()` entirely and implement the five storage callbacks described below.
 
 `validate(request, uploadInfo)` runs once when the browser asks to start an upload—before the upload directory is created and before Parcelweave accepts the first byte. `uploadInfo` contains the client-declared `name`, `size`, and `metadata`, so this hook is useful for limits, permissions, and preliminary checks. It does not receive file contents. Inspect actual bytes in `finalize()` after the complete file arrives, or provide a custom `writePart()` if you need incremental inspection while pieces arrive.
 
 Use `createStorageContainer()` when this folder-based storage fits your application. If you want object storage, a different filesystem layout, or another destination, skip it and pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
 
-The storage container uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
+The storage container uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md). Treat upload IDs as identifiers, not as authentication.
 
 `app.use("/api/uploads", ...)` adds the upload routes at that URL. You may choose any path; use the same value in the browser client's `endpoint` option.
 
