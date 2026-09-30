@@ -51,10 +51,6 @@ Here is the same setup as a complete server:
 
 ```js
 import express from "express";
-import { createWriteStream } from "node:fs";
-import { rename } from "node:fs/promises";
-import { Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 
 // Parcelweave imports.
 import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
@@ -76,22 +72,10 @@ const storage = createLocalStorage({
   },
   // Optional: finalize() runs after the complete file has been received.
   finalize: async (_request, upload) => {
-    const processedPath = `${upload.path}.processed`;
-    await pipeline(
-      upload.createReadStream(),
-      // A small example transform: uppercase ASCII letters in each chunk.
-      new Transform({ transform(chunk, _encoding, done) {
-        for (let index = 0; index < chunk.length; index += 1) {
-          if (chunk[index] >= 97 && chunk[index] <= 122) chunk[index] -= 32;
-        }
-        done(null, chunk);
-      } }),
-      createWriteStream(processedPath),
-    );
-    await rename(processedPath, upload.path);
-
-    // This object is returned to uploads.upload() in the browser.
-    return { id: upload.id, name: upload.name, processed: true };
+    // The full file is now saved at upload.path.
+    console.log("Upload received:", upload.name);
+    // Return the information your browser needs.
+    return { id: upload.id, name: upload.name };
   },
 });
 
@@ -110,7 +94,7 @@ app.listen(3000, () => {
 });
 ```
 
-`directory` is required only when you choose `createLocalStorage()`. That adapter creates the directory when the first file arrives and writes incoming bytes to `uploads/<upload-id>/data`. The example `finalize()` reads and modifies the completed file through a backpressured Node pipeline, then atomically replaces the original. It never loads the whole file into memory. You can omit that hook to leave the file untouched. The adapter's `maxFileBytes` and `validate` options are also optional.
+`directory` is required only for the optional `createLocalStorage()` adapter. It saves files under `uploads/<upload-id>/data`. You can omit `validate` and `finalize`, or replace the adapter with your own storage functions.
 
 `validate(request, uploadInfo)` runs once when the browser asks to start an upload—before the upload directory is created and before Parcelweave accepts the first byte. `uploadInfo` contains the client-declared `name`, `size`, and `metadata`, so this hook is useful for limits, permissions, and preliminary checks. It does not receive file contents. Inspect actual bytes in `finalize()` after the complete file arrives, or provide a custom `writePart()` if you need incremental inspection while pieces arrive.
 
@@ -119,6 +103,8 @@ Parcelweave itself does not require a directory, local disk, or this adapter. Yo
 The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
 `app.use("/api/uploads", ...)` adds the upload routes at that URL. You may choose any path; use the same value in the browser client's `endpoint` option.
+
+For reading or changing file contents, see the [file handling examples](docs/examples/file-handling.md).
 
 ### 2. Send files from your browser
 

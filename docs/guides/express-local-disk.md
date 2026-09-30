@@ -36,10 +36,6 @@ Use your existing `app`. No login, user, or session is required for this local s
 
 ```js
 import express from "express";
-import { createWriteStream } from "node:fs";
-import { rename } from "node:fs/promises";
-import { Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
@@ -53,19 +49,10 @@ const storage = createLocalStorage({
     }
   },
   finalize: async (_request, upload) => {
-    const processedPath = `${upload.path}.processed`;
-    await pipeline(
-      upload.createReadStream(),
-      new Transform({ transform(chunk, _encoding, done) {
-        for (let index = 0; index < chunk.length; index += 1) {
-          if (chunk[index] >= 97 && chunk[index] <= 122) chunk[index] -= 32;
-        }
-        done(null, chunk);
-      } }),
-      createWriteStream(processedPath),
-    );
-    await rename(processedPath, upload.path);
-    return { id: upload.id, name: upload.name, processed: true };
+    // The full file is now saved at upload.path.
+    console.log("Upload received:", upload.name);
+    // Return the information your browser needs.
+    return { id: upload.id, name: upload.name };
   },
 });
 
@@ -79,6 +66,8 @@ Incoming files are saved as `uploads/<id>/data`. `finalize` runs only after the 
 The browser side still owns its original `File` or `Blob`; call its native `stream()` method when client code needs to inspect it. The backend stream is separate and reads the fully received server-side copy. Neither Parcelweave API eagerly duplicates the whole file in memory.
 
 Make `finalize` safe to call again: if a process stops after your work finishes but before the result is recorded, the operation can be retried. Also schedule cleanup for abandoned uploads.
+
+See the [file handling examples](../examples/file-handling.md) for reading and modifying completed files.
 
 ## If the first upload fails
 
