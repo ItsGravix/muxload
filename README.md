@@ -30,13 +30,26 @@ Express is optional. This example adds uploads to an Express server. For another
 
 ```js
 import express from "express";
-import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
+import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
 import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
 const app = express();
 
 // Parcelweave: choose where files are saved and add the upload routes.
-const storage = createStorageContainer({ directory: "./uploads" });
+const storage = createStorageContainer({
+  directory: "./uploads",
+  // Optional: check the declared filename before receiving any bytes.
+  async validate(_request, file) {
+    if (!file.name.toLowerCase().endsWith(".txt")) {
+      throw new UploadHttpError(415, "Only .txt filenames are allowed.");
+    }
+  },
+  // Optional: the complete file is now saved at upload.path.
+  async finalize(_request, upload) {
+    console.log("File received:", upload.path);
+    return { id: upload.id, name: upload.name }; // Returned to the browser.
+  },
+});
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 
 app.listen(3000);
