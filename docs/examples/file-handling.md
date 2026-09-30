@@ -13,19 +13,26 @@ Start with the [Express setup](../../README.md#optional-quick-start-express). Th
 Use this callback in `createStorageContainer({ directory: "./uploads", finalize })`:
 
 ```js
-async function finalize(_request, upload) {
-  let bytesRead = 0;
+import { createHash } from "node:crypto";
 
-  // Read the file a piece at a time.
+async function finalize(_request, upload) {
+  const hash = createHash("sha256");
+
+  // Each piece is a Buffer containing real bytes from the uploaded file.
   for await (const piece of upload.createReadStream()) {
-    bytesRead += piece.length;
+    hash.update(piece);
   }
 
-  return { id: upload.id, bytesRead };
+  return {
+    id: upload.id,
+    sha256: hash.digest("hex"),
+  };
 }
 ```
 
-`createReadStream()` opens the saved file for reading. Each loop iteration receives a small piece of its bytes. Nothing is read until you consume the stream, and you do not need to hold the whole file in memory. Each call opens a fresh stream.
+This reads the actual saved file and calculates its SHA-256 checksum. `piece` is a Node.js `Buffer`, so your code can inspect it, send it to a parser, update a hash, or pass it to another stream.
+
+`createReadStream()` does not load the whole file into memory. It opens the file and supplies small pieces as the loop asks for them. Each call opens a fresh stream.
 
 ## Modify a text file
 
