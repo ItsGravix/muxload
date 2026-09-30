@@ -19,7 +19,7 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.11.0
+npm install github:ItsGravix/parcelweave#v0.12.0
 ```
 
 ## Optional quick start: Express
@@ -29,17 +29,17 @@ This section shows one ready-made setup if you use Express. It is not required t
 
 ### 1. Add uploads to your Express server
 
-If you already have an Express app, add the imports near the top of your server file and mount the router. This quick start uses Parcelweave's optional local-disk adapter; you can replace it with your own storage functions.
+If you already have an Express app, add the imports near the top of your server file and mount the router. This quick start uses Parcelweave's optional storage container; you can replace it with your own storage functions.
 
 ```js
 import express from "express";
 
 // Parcelweave imports.
 import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
-import { createLocalStorage } from "@itsgravix/parcelweave/storage";
+import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
-// Parcelweave setup starts here. This local-disk adapter is optional.
-const storage = createLocalStorage({
+// Parcelweave setup starts here. This storage container is optional.
+const storage = createStorageContainer({
   directory: "./uploads", // The adapter creates this folder automatically.
 });
 
@@ -54,7 +54,7 @@ import express from "express";
 
 // Parcelweave imports.
 import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
-import { createLocalStorage } from "@itsgravix/parcelweave/storage";
+import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
 // Your normal Express setup.
 const app = express();
@@ -63,8 +63,8 @@ app.use(express.json());
 // Your normal application routes can come before or after Parcelweave.
 app.get("/", (request, response) => response.send("Server is running"));
 
-// Parcelweave setup starts here. This local-disk adapter is optional.
-const storage = createLocalStorage({
+// Parcelweave setup starts here. This storage container is optional.
+const storage = createStorageContainer({
   directory: "./uploads", // Created automatically when the first upload starts.
   maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
   // Optional: runs once before Parcelweave accepts any file bytes.
@@ -91,13 +91,13 @@ app.listen(3000, () => {
 });
 ```
 
-Folder creation is an optional feature provided by `createLocalStorage()`. If you choose this adapter, give it one base directory, such as `./uploads`; it automatically creates that directory and a separate subfolder for every accepted upload. The file bytes are saved at `uploads/<upload-id>/data`, while Parcelweave's upload record is kept beside them. You do not need to create these folders yourself. The `validate` and `finalize` options are optional.
+Folder creation is an optional feature provided by `createStorageContainer()`. Give it one base directory, such as `./uploads`; it automatically creates that directory and a separate subfolder for every accepted upload. The file bytes are saved at `uploads/<upload-id>/data`, while Parcelweave's upload record is kept beside them. You do not need to create these folders yourself. The `validate` and `finalize` options are optional.
 
 `validate(request, uploadInfo)` runs once when the browser asks to start an upload—before the upload directory is created and before Parcelweave accepts the first byte. `uploadInfo` contains the client-declared `name`, `size`, and `metadata`, so this hook is useful for limits, permissions, and preliminary checks. It does not receive file contents. Inspect actual bytes in `finalize()` after the complete file arrives, or provide a custom `writePart()` if you need incremental inspection while pieces arrive.
 
-Use `createLocalStorage()` when saving uploads this way fits your application. If you want object storage, a different filesystem layout, or another destination, skip `createLocalStorage()` and pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
+Use `createStorageContainer()` when this folder-based storage fits your application. If you want object storage, a different filesystem layout, or another destination, skip it and pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
 
-The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
+The storage container uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
 `app.use("/api/uploads", ...)` adds the upload routes at that URL. You may choose any path; use the same value in the browser client's `endpoint` option.
 
@@ -137,7 +137,7 @@ document.querySelector("#files").addEventListener("change", (event) => {
 
 On the client, Parcelweave accepts the browser's native `File` or `Blob`. Your code keeps direct access to it, and `onProgress` receives it as `file`. You can read it with the browser's built-in `file.stream()` before or during the upload. Browser files are immutable; to change the uploaded bytes, create a new `File` or `Blob` and pass that value to `upload()`.
 
-On the backend, the local-disk adapter calls `finalize()` only after every byte has been received and confirmed. Its `upload.createReadStream()` opens a fresh Node readable stream for the completed server-side file. The stream is created only when called, reads bounded chunks with backpressure, and does not load the entire file into memory.
+On the backend, the storage container calls `finalize()` only after every byte has been received and confirmed. Its `upload.createReadStream()` opens a fresh Node readable stream for the completed server-side file. The stream is created only when called, reads bounded chunks with backpressure, and does not load the entire file into memory.
 
 `endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
 

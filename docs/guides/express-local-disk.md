@@ -37,9 +37,9 @@ Use your existing `app`. No login, user, or session is required for this local s
 ```js
 import express from "express";
 import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
-import { createLocalStorage } from "@itsgravix/parcelweave/storage";
+import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
-const storage = createLocalStorage({
+const storage = createStorageContainer({
   directory: "./uploads", // Created automatically when the first upload starts.
   maxFileBytes: 2 * 1024 ** 3,
   // Runs once before any file bytes are accepted.

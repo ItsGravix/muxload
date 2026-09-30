@@ -6,11 +6,11 @@ Start with the [Express setup](../../README.md#optional-quick-start-express). Th
 
 `validate(request, uploadInfo)` checks the declared name, size, and metadata before file bytes are accepted. A filename extension does not prove what the file contains.
 
-`finalize(request, upload)` runs after the whole file has been saved. Parcelweave waits for it to finish, then returns its result to the browser's `uploads.upload()` call. With the local-disk adapter, `upload.path` is the saved file's path.
+`finalize(request, upload)` runs after the whole file has been saved. Parcelweave waits for it to finish, then returns its result to the browser's `uploads.upload()` call. With the storage container, `upload.path` is the saved file's path.
 
 ## Read a completed file
 
-Use this callback in `createLocalStorage({ directory: "./uploads", finalize })`:
+Use this callback in `createStorageContainer({ directory: "./uploads", finalize })`:
 
 ```js
 async function finalize(_request, upload) {
@@ -99,4 +99,4 @@ This small-file example holds the text and edited content in memory. For large-f
 
 ## Use your own storage
 
-`upload.createReadStream()` is a convenience of the local-disk adapter. With custom storage, your `completeUpload()` callback can open a stream using your filesystem or storage service. See the [custom byte handler guide](../guides/custom-storage.md).
+`upload.createReadStream()` is a convenience of the storage container. With custom storage, your `completeUpload()` callback can open a stream using your filesystem or storage service. See the [custom byte handler guide](../guides/custom-storage.md).

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { UploadHttpError } from "./server.js";
 
 /** Persistent local files for one service instance/process per directory. */
-export function createLocalStorage({ directory, validate, finalize, maxFileBytes = 2 * 1024 ** 3 } = {}) {
+export function createStorageContainer({ directory, validate, finalize, maxFileBytes = 2 * 1024 ** 3 } = {}) {
   if (!directory) throw new TypeError("directory is required.");
   const root = path.resolve(directory);
   const location = (id) => {

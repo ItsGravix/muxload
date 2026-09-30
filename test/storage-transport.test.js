@@ -6,14 +6,14 @@ import os from "node:os";
 import path from "node:path";
 import { createUploadClient, UploadError } from "../src/client.js";
 import { createUploadService } from "../src/server.js";
-import { createLocalStorage } from "../src/storage.js";
+import { createStorageContainer } from "../src/storage.js";
 import { encodeBatch } from "../src/protocol.js";
 
 test("endpoint-free transport resumes a committed batch after response loss and pauses independently", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "parcelweave-test-"));
   try {
     const finalizedReads = new Map();
-    const storage = createLocalStorage({
+    const storage = createStorageContainer({
       directory,
       async finalize(_context, upload) {
         const hash = createHash("sha256");
@@ -67,7 +67,7 @@ test("endpoint-free transport resumes a committed batch after response loss and 
     assert.equal(finalizedReads.get(second.id).hash, createHash("sha256").update("second").digest("hex"));
     assert.equal(events.filter((event) => event.type === "complete").length, 2);
     assert.ok(events.some((event) => event.type === "retry"));
-    const restarted = createUploadService({ storage: createLocalStorage({ directory }) });
+    const restarted = createUploadService({ storage: createStorageContainer({ directory }) });
     assert.deepEqual(await restarted.status(undefined, [result.id]), { offsets: { [result.id]: bytes.length } });
     assert.deepEqual(await restarted.status({ any: "context" }, [second.id]), { offsets: { [second.id]: 6 } });
     assert.deepEqual(await restarted.complete(undefined, result.id), result);
