@@ -155,28 +155,37 @@ document.querySelector("#files").addEventListener("change", (event) => {
 });
 ```
 
-### Important setup details
+### Browser setup details
 
-#### Reuse one client
+#### Reuse one browser client
 
-Create the upload client once and use it for every file. Files using the same client can share the connection and be coordinated together. Separate clients upload independently.
+This means the `uploads` object created by `createHttpUploadClient()` in your frontend—not the Express router on your backend.
 
-#### Match the endpoint
+Create it once and use it for every file on the page. Files using the same browser client can share the connection and be coordinated together. Separate clients upload independently.
 
-`endpoint` is the URL where your server receives uploads. It should match the path used by `app.use()`:
+#### Connect the browser to the server route
+
+The browser's `endpoint` should match the path where the backend mounted its upload router:
 
 ```js
+// Backend (Express)
 app.use("/api/uploads", router);
+
+// Frontend (browser)
 const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
 ```
 
 For an upload server on another origin, use its full URL and configure CORS and authentication there.
 
-#### Access file contents
+#### Access the original browser file
 
 The browser gives you a normal `File` or `Blob`, and `onProgress` returns the same value as `file`.
 
-If you use the optional local-disk adapter, `finalize()` runs after the complete file arrives. `upload.createReadStream()` then lets you read it in small pieces without loading the whole file into memory. Custom storage handlers can provide their own way to read completed files.
+### Server-side file access
+
+This is separate from the browser client. Your backend normally creates and mounts its Parcelweave router once when the server starts; it does not create a router for each file.
+
+If your backend uses the optional local-disk adapter, `finalize()` runs after the complete file arrives. `upload.createReadStream()` then lets the server read it in small pieces without loading the whole file into memory. Custom storage handlers can provide their own way to access completed files.
 
 See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
 
