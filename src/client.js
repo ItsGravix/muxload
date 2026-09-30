@@ -1,4 +1,5 @@
 import { BATCH_CONTENT_TYPE, encodeBatch } from "./protocol.js";
+import { uploadRoutes } from "./routes.js";
 
 const KiB = 1024;
 const MiB = 1024 * KiB;
@@ -109,22 +110,15 @@ function createHttpRequests(options = {}) {
     throw new TypeError("createUploadClient() requires a non-empty endpoint.");
   }
   const endpoint = options.endpoint.replace(/\/$/, "");
-  const configuredRoutes = options.routes ?? {};
-  if (!configuredRoutes || typeof configuredRoutes !== "object" || Array.isArray(configuredRoutes)) {
-    throw new TypeError("routes must be an object.");
-  }
-  const routeDefaults = {
-    create: () => "uploads",
-    batch: () => "batches",
-    status: (ids) => `status?ids=${ids.map(encodeURIComponent).join(",")}`,
-    complete: (id) => `uploads/${encodeURIComponent(id)}/complete`,
-    remove: (id) => `uploads/${encodeURIComponent(id)}`,
-  };
+  const configuredRoutes = uploadRoutes(options.routes, { browser: true });
   const route = (name, value) => {
     const configured = configuredRoutes[name];
-    const path = typeof configured === "function"
+    let path = typeof configured === "function"
       ? configured(value)
-      : configured ?? routeDefaults[name](value);
+      : configured.replace(":id", () => encodeURIComponent(value));
+    if (name === "status" && typeof configured !== "function") {
+      path += `${path.includes("?") ? "&" : "?"}ids=${value.map(encodeURIComponent).join(",")}`;
+    }
     if (typeof path !== "string" || !path) throw new TypeError(`routes.${name} must resolve to a URL string.`);
     return /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? path : `${endpoint}/${path.replace(/^\/+/, "")}`;
   };

@@ -1,61 +1,62 @@
-# Custom routes and servers
+# Change the upload URL
 
-Use this setup when you already have a router, cannot mount an Express router, or need your own URL layout.
-
-## Browser routes
-
-Give the upload client your endpoint and any route names that differ from Parcelweave's defaults:
+Usually, you only need to choose where uploads live in your app.
 
 ```js
-import { createUploadClient } from "@itsgravix/parcelweave";
+// Server: use your existing Express app and storage setup.
+app.use("/files", createExpressUploadRouter({ express, storage }));
 
+// Browser: point to the same URL.
+const uploads = createUploadClient({ endpoint: "/files" });
+```
+
+Parcelweave creates the upload routes under `/files` and handles the requests for you. See the [complete Express setup](../../README.md#optional-quick-start-express) for imports and storage setup.
+
+## Upload to another server
+
+Use its full URL in the browser:
+
+```js
 const uploads = createUploadClient({
-  endpoint: "/api",
-  routes: {
-    create: "files/new",
-    batch: "files/data",
-    status: (ids) => `files/status?ids=${ids.map(encodeURIComponent).join(",")}`,
-    complete: (id) => `files/${encodeURIComponent(id)}/complete`,
-    remove: (id) => `files/${encodeURIComponent(id)}`,
-  },
+  endpoint: "https://uploads.example.com/files",
 });
 ```
 
-Route values may be full URLs, so individual operations can live on different services.
+That server must run Parcelweave's upload handler and allow your website through CORS. An ordinary file upload endpoint will not understand Parcelweave's requests. If your server requires authentication, supply `headers` or `credentials: "include"` as appropriate.
 
-## Connect your router
+## Change individual route names
+
+Only use `routes` if changing the base URL is not enough. Put the paths you want to change in a shared file:
 
 ```js
-import { createUploadService } from "@itsgravix/parcelweave/server";
-
-const mux = createUploadService({
-  createUpload,
-  resolveUpload,
-  writePart,
-  completeUpload,
-  removeUpload,
-});
-
-router.post("/files/new", async (req, res) => res.status(201).json(await mux.create(req, req.body)));
-router.post("/files/data", async (req, res) => res.json(await mux.batch(req, req.rawBody)));
-router.get("/files/status", async (req, res) => res.json(await mux.status(req, req.query.ids.split(","))));
-router.post("/files/:id/complete", async (req, res) => res.json(await mux.complete(req, req.params.id)));
-router.delete("/files/:id", async (req, res) => {
-  await mux.remove(req, req.params.id);
-  res.status(204).end();
-});
+// upload-routes.js — imported by your browser and server code.
+export const routes = {
+  create: "start",              // Start a file upload.
+  batch: "pieces",              // Receive pieces of files.
+  status: "progress",           // Check how many bytes are saved.
+  complete: ":id/finish",       // Finish a file upload.
+  remove: ":id",               // Cancel a file upload.
+};
 ```
 
-The batch route must give `mux.batch()` the raw binary request body. Do not parse it as JSON or text. Catch `UploadHttpError` in your normal error middleware and return its `status`, `message`, and optional `details`.
+Pass that same object to both sides:
 
-## Storage contract
+```js
+// Server
+app.use("/files", createExpressUploadRouter({ express, storage, routes }));
 
-| Callback | Responsibility |
-| --- | --- |
-| `createUpload(context, specification)` | Create a record and return `{ id, size, offset }`. Add application checks here if needed. |
-| `resolveUpload(context, id)` | Return the current record. Add authorization here if needed. |
-| `writePart(context, upload, bytes, offset)` | Store unchanged bytes at the exact offset. |
-| `completeUpload(context, upload)` | Validate or publish the finished file and return a result. |
-| `removeUpload(context, upload)` | Remove temporary bytes and the record. |
+// Browser
+const uploads = createUploadClient({ endpoint: "/files", routes });
+```
 
-Parcelweave handles decoding, bounds checks, duplicate pieces, offset reconciliation, and locking inside one service instance. Shared or multi-process storage must update offsets atomically.
+Both snippets import `routes` from your shared file. `:id` is replaced with the upload ID automatically. Parcelweave also builds the progress query and handles request parsing and error responses. You do not need to write the five request handlers.
+
+You can change just one path, such as `{ batch: "pieces" }`; the rest keep their defaults. Paths are relative to the base URL. The defaults are `uploads`, `batches`, `status`, `uploads/:id/complete`, and `uploads/:id`.
+
+## Using another framework
+
+If your framework uses standard `Request` and `Response` objects, use `createFetchUploadHandler({ basePath: "/files", storage, routes })`. See the [Fetch setup](serverless-fetch.md). It accepts the same route settings and does not start a server.
+
+For a router that cannot use either handler, `createUploadService()` exposes the underlying operations. That is an advanced integration: your router must parse bounded request bodies and send HTTP responses. See the [service reference](../reference/upload-service.md).
+
+Choosing custom storage is independent of changing URLs. See [custom storage](custom-storage.md) if you want to decide how bytes are saved.

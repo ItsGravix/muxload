@@ -1,4 +1,5 @@
 import { decodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
+import { uploadRoutes, matchUploadRoute } from "./routes.js";
 
 const CREATE_BODY_LIMIT = 32 * 1024;
 const MAX_BATCH_BYTES_LIMIT = 100 * 1024 * 1024;
@@ -231,22 +232,26 @@ async function readJson(request, maximumBytes) {
  */
 export function createFetchUploadHandler(options) {
   const service = createUploadService(options);
+  const routes = uploadRoutes(options.routes);
   const basePath = `/${String(options.basePath ?? "").replace(/^\/+|\/+$/g, "")}`.replace(/^\/$/, "");
   const responseHeaders = options.responseHeaders ?? {};
 
   return async function handleUpload(request, context = request) {
     try {
       const url = new URL(request.url);
+      if (basePath && url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
+        return jsonResponse({ error: "Parcelweave route not found." }, 404, responseHeaders);
+      }
       const path = basePath && url.pathname.startsWith(`${basePath}/`)
         ? url.pathname.slice(basePath.length)
         : basePath === url.pathname ? "/" : url.pathname;
-      const uploadMatch = path.match(/^\/uploads\/([^/]+)$/);
-      const completeMatch = path.match(/^\/uploads\/([^/]+)\/complete$/);
+      const uploadMatch = matchUploadRoute(routes.remove, path);
+      const completeMatch = matchUploadRoute(routes.complete, path);
 
-      if (request.method === "POST" && path === "/uploads") {
+      if (request.method === "POST" && path === `/${routes.create}`) {
         return jsonResponse(await service.create(context, await readJson(request, CREATE_BODY_LIMIT)), 201, responseHeaders);
       }
-      if (request.method === "POST" && path === "/batches") {
+      if (request.method === "POST" && path === `/${routes.batch}`) {
         if (mediaType(request) !== BATCH_CONTENT_TYPE) {
           throw new UploadHttpError(415, `Use ${BATCH_CONTENT_TYPE}.`);
         }
@@ -257,15 +262,15 @@ export function createFetchUploadHandler(options) {
         const body = await readLimitedBody(request, service.maxBatchBytes + 64 * 1024);
         return jsonResponse(await service.batch(context, body), 200, responseHeaders);
       }
-      if (request.method === "GET" && path === "/status") {
+      if (request.method === "GET" && path === `/${routes.status}`) {
         const ids = url.searchParams.get("ids")?.split(",").filter(Boolean) ?? [];
         return jsonResponse(await service.status(context, ids), 200, responseHeaders);
       }
       if (request.method === "POST" && completeMatch) {
-        return jsonResponse(await service.complete(context, requestUploadId(decodeURIComponent(completeMatch[1]))), 200, responseHeaders);
+        return jsonResponse(await service.complete(context, requestUploadId(decodeURIComponent(completeMatch.id))), 200, responseHeaders);
       }
       if (request.method === "DELETE" && uploadMatch) {
-        await service.remove(context, requestUploadId(decodeURIComponent(uploadMatch[1])));
+        await service.remove(context, requestUploadId(decodeURIComponent(uploadMatch.id)));
         return new Response(null, { status: 204, headers: responseHeaders });
       }
       return jsonResponse({ error: "Parcelweave route not found." }, 404, responseHeaders);
@@ -281,17 +286,18 @@ export function createExpressUploadRouter(options) {
   const { express } = options;
   if (!express?.Router) throw new TypeError("Pass the Express module as options.express.");
   const service = createUploadService(options);
+  const routes = uploadRoutes(options.routes);
   const router = express.Router();
   const sendError = (response, error) => {
     const safe = asHttpError(error);
     response.status(safe.status).json({ ...safe.details, error: safe.message });
   };
 
-  router.post("/uploads", express.json({ limit: "32kb" }), async (request, response) => {
+  router.post(`/${routes.create}`, express.json({ limit: "32kb" }), async (request, response) => {
     try { response.status(201).json(await service.create(request, request.body)); }
     catch (error) { sendError(response, error); }
   });
-  router.post("/batches", express.raw({
+  router.post(`/${routes.batch}`, express.raw({
     type: BATCH_CONTENT_TYPE,
     limit: service.maxBatchBytes + 64 * 1024,
   }), async (request, response) => {
@@ -300,17 +306,17 @@ export function createExpressUploadRouter(options) {
       response.json(await service.batch(request, request.body));
     } catch (error) { sendError(response, error); }
   });
-  router.get("/status", async (request, response) => {
+  router.get(`/${routes.status}`, async (request, response) => {
     try {
       const ids = String(request.query.ids || "").split(",").filter(Boolean);
       response.set("Cache-Control", "no-store").json(await service.status(request, ids));
     } catch (error) { sendError(response, error); }
   });
-  router.post("/uploads/:id/complete", express.json({ limit: "1kb" }), async (request, response) => {
+  router.post(`/${routes.complete}`, express.json({ limit: "1kb" }), async (request, response) => {
     try { response.json(await service.complete(request, request.params.id)); }
     catch (error) { sendError(response, error); }
   });
-  router.delete("/uploads/:id", async (request, response) => {
+  router.delete(`/${routes.remove}`, async (request, response) => {
     try { await service.remove(request, request.params.id); response.status(204).end(); }
     catch (error) { sendError(response, error); }
   });

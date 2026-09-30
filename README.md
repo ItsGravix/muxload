@@ -19,161 +19,78 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.16.0
+npm install github:ItsGravix/parcelweave#v0.17.0
 ```
 
 ## Optional quick start: Express
 
-This section shows one ready-made setup if you use Express. It is not required to use Parcelweave. For another server or infrastructure, go to the [custom server guide](docs/guides/custom-router.md) or [Fetch and serverless guide](docs/guides/serverless-fetch.md).
+Express is optional. This example adds uploads to an Express server; see the [Fetch guide](docs/guides/serverless-fetch.md) for other frameworks.
 
-
-### 1. Add uploads to your Express server
-
-If you already have an Express app, add the imports near the top of your server file and mount the router. This quick start uses Parcelweave's optional storage container; you can replace it with your own storage functions.
+### 1. Server
 
 ```js
 import express from "express";
-
-// Parcelweave imports.
 import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
 import { createStorageContainer } from "@itsgravix/parcelweave/storage";
 
-// Parcelweave setup starts here. This storage container is optional.
-const storage = createStorageContainer({
-  directory: "./uploads", // The adapter creates this folder automatically.
-});
-
-app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
-// Parcelweave setup ends here.
-```
-
-Here is the same setup as a complete server:
-
-```js
-import express from "express";
-
-// Parcelweave imports.
-import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
-import { createStorageContainer } from "@itsgravix/parcelweave/storage";
-
-// Your normal Express setup.
 const app = express();
-app.use(express.json());
 
-// Your normal application routes can come before or after Parcelweave.
-app.get("/", (request, response) => response.send("Server is running"));
-
-// Parcelweave setup starts here. This storage container is optional.
-const storage = createStorageContainer({
-  directory: "./uploads", // Created automatically when the first upload starts.
-  maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
-  // Optional: runs once before Parcelweave accepts any file bytes.
-  validate: async (_request, uploadInfo) => {
-    if (!uploadInfo.name.toLowerCase().endsWith(".txt")) {
-      throw new UploadHttpError(415, "Only text files are allowed.");
-    }
-  },
-  // Optional: finalize() runs after the complete file has been received.
-  finalize: async (_request, upload) => {
-    // The full file is now saved at upload.path.
-    console.log("Upload received:", upload.name);
-    // Return the information your browser needs.
-    return { id: upload.id, name: upload.name };
-  },
-});
-
-// Add this alongside your other API routes.
+// Parcelweave: choose where files are saved and add the upload routes.
+const storage = createStorageContainer({ directory: "./uploads" });
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
-// Parcelweave setup ends here.
 
-app.listen(3000, () => {
-  console.log("Server listening on http://localhost:3000");
-});
+app.listen(3000);
 ```
 
-#### Choose how uploads are stored
+Already have an Express app? Add the imports, storage setup, and `app.use()` to that app. You do not need another server.
 
-`createStorageContainer()` is optional. It is a ready-made local-disk adapter for the shortest setup.
+`createStorageContainer()` is an optional way to save files to disk. It creates the folder and saves one file per upload, with no metadata files beside it. You can instead supply [your own storage functions](docs/guides/custom-storage.md).
 
-You can instead connect Parcelweave directly to your own filesystem, object storage, database, stream, or service by providing `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload`. Parcelweave's upload protocol and browser client work with either approach.
+This adapter keeps resume information in memory by default. Use its `state` option with your database if uploads must survive server restarts. See the [storage guide](docs/guides/express-local-disk.md).
 
-#### If you use the local-disk adapter
+### 2. Browser
 
-`createStorageContainer()` creates the chosen directory when the first upload starts. Each upload is one file named with a random upload ID. It does not add metadata or JSON sidecar files to the folder.
-
-##### Resume state
-
-The simple adapter keeps offsets and metadata in memory. Interrupted uploads can resume while the server is running. To resume after a server restart, provide a `state` adapter backed by your database or cache.
-
-##### Validation and completed files
-
-`validate(request, uploadInfo)` runs before the file is created or any bytes are accepted. It receives the client-declared `name`, `size`, and `metadata`, but not the file contents.
-
-Use `finalize()` to inspect the completed file, or a custom `writePart()` to inspect pieces as they arrive. See the [file handling examples](docs/examples/file-handling.md).
-
-#### Connect your own storage
-
-Pass your storage functions directly to the router instead of passing `storage`. Your code controls where bytes go, how offsets are saved, and what happens when an upload completes. See the [custom byte handler guide](docs/guides/custom-storage.md).
-
-#### Protect public uploads
-
-Upload IDs identify uploads; they are not authentication. Public or multi-user applications should check authorization in their custom callbacks.
-
-#### Match the browser endpoint
-
-`app.use("/api/uploads", ...)` mounts the server routes at `/api/uploads`. Use that same path for the browser client's `endpoint`. You may replace it with any URL you choose.
-
-### 2. Send files from your browser
-
-Add a file picker to your page:
+Add a file picker:
 
 ```html
 <input id="files" type="file" multiple />
 ```
 
-Put this in your frontend JavaScript, loaded after the input exists. The package import works with a frontend bundler such as Vite:
+Use this in your frontend JavaScript with a bundler such as Vite. Load it after the input exists:
 
 ```js
 import { createUploadClient } from "@itsgravix/parcelweave";
 
-// Match the path in app.use() on your Express server.
+// Create once and reuse for every file. Match the server's app.use() URL.
 const uploads = createUploadClient({ endpoint: "/api/uploads" });
 
 document.querySelector("#files").addEventListener("change", (event) => {
   for (const file of event.target.files) {
     uploads.upload(file, {
-      onProgress({ file: sourceFile, percentage }) {
-        // sourceFile is the same browser File or Blob passed to upload().
-        console.log(`${sourceFile.name}: ${percentage}%`);
+      onProgress({ percentage }) {
+        console.log(file.name, percentage);
       },
     }).then((result) => {
       console.log("Upload complete:", result);
     }).catch((error) => {
-      console.error(`Could not upload ${file.name}:`, error);
+      console.error("Upload failed:", error);
     });
   }
 });
 ```
 
-See the [Express guide](docs/guides/express-local-disk.md) for storage limits, completion hooks, and setup troubleshooting.
+The browser client handles requests, progress, retries, and resume. Your server receives and stores the bytes.
 
-## More control
+For a separate upload server, use its full URL as `endpoint` and configure CORS there. In local development, a frontend proxy can forward `/api/uploads` to Express.
 
-### Choose how files are stored
+## Customize what you need
 
-Handle uploaded data directly with your own functions. `createUpload` can save any destination in your record, `writePart(context, upload, bytes, offset)` receives each accepted byte range, and `completeUpload(context, upload)` runs once the entire file has been received. You decide the directory, filename, stream, storage service, and finished-file behavior. No Parcelweave storage adapter is required.
-
-Pass these functions directly to the Express router, Fetch handler, or standalone upload service. The browser code stays the same. See [custom byte and completion handlers](docs/guides/custom-storage.md) for the complete setup, including using your own streams.
-
-### Custom URLs and authentication
-
-The browser client handles its HTTP requests internally. Set `endpoint` to the upload URL, then use its `headers`, `credentials`, and `routes` options when your API needs authentication or different route paths. See [custom routes and servers](docs/guides/custom-router.md).
-
-Choose the guide that matches your application:
-
-- [Express and local disk](docs/guides/express-local-disk.md) — the shortest complete setup.
-- [Custom routes and servers](docs/guides/custom-router.md) — connect Parcelweave to an existing router or unusual URL layout.
-- [Serverless and Fetch runtimes](docs/guides/serverless-fetch.md) — use standard `Request` and `Response` objects.
+- [Change URLs](docs/guides/custom-router.md): choose another base URL or rename individual routes using a shared settings object.
+- [Use your own storage](docs/guides/custom-storage.md): decide where bytes go and what happens when a file finishes.
+- [Validate or process files](docs/guides/express-local-disk.md): optional checks before upload and processing after it completes.
+- [Read or modify file contents](docs/examples/file-handling.md): small examples using streams.
+- [Use another framework](docs/guides/serverless-fetch.md): connect a standard Request/Response handler.
+- [Integrate your own router](docs/reference/upload-service.md): low-level operations for a fully custom server.
 
 ## What Parcelweave handles
 
