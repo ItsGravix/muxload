@@ -19,7 +19,7 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.13.0
+npm install github:ItsGravix/parcelweave#v0.13.1
 ```
 
 ## Optional quick start: Express
@@ -219,11 +219,13 @@ Create one client and reuse it for every file. Every `upload()` call joins the s
 ## Before production
 
 - For public or multi-user servers, add authentication and ownership checks in your application callbacks.
+- If browser authentication uses cookies, reject cross-site mutation requests with CSRF tokens or strict `Origin` checks.
 - Limit file sizes, request rates, active sessions, and storage use.
 - Generate storage paths on the server; never trust the original filename as a path.
 - Persist offsets atomically when multiple processes can receive requests.
 - Keep platform and proxy body limits above your configured maximum batch size.
 - Inspect completed files before publishing or processing them.
+- Keep Node.js, your framework, storage SDKs, and every parser that handles completed files patched.
 
 Parcelweave is a focused upload tool, not a replacement for every upload system. Tus, object-storage multipart uploads, or a managed service may fit some applications better.
 
