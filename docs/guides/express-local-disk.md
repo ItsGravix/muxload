@@ -40,7 +40,7 @@ import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelwea
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
 const storage = createLocalStorage({
-  directory: "./uploads",
+  directory: "./uploads", // Created automatically when the first upload starts.
   maxFileBytes: 2 * 1024 ** 3,
   // Runs once before any file bytes are accepted.
   validate: async (_request, uploadInfo) => {
