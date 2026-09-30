@@ -91,23 +91,29 @@ app.listen(3000, () => {
 });
 ```
 
-#### Where files are saved
+#### Choose how uploads are stored
+
+`createStorageContainer()` is optional. It is a ready-made local-disk adapter for the shortest setup.
+
+You can instead connect Parcelweave directly to your own filesystem, object storage, database, stream, or service by providing `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload`. Parcelweave's upload protocol and browser client work with either approach.
+
+#### If you use the local-disk adapter
 
 `createStorageContainer()` creates the chosen directory when the first upload starts. Each upload is one file named with a random upload ID. It does not add metadata or JSON sidecar files to the folder.
 
-#### How resume state works
+##### Resume state
 
 The simple adapter keeps offsets and metadata in memory. Interrupted uploads can resume while the server is running. To resume after a server restart, provide a `state` adapter backed by your database or cache.
 
-#### When validation runs
+##### Validation and completed files
 
 `validate(request, uploadInfo)` runs before the file is created or any bytes are accepted. It receives the client-declared `name`, `size`, and `metadata`, but not the file contents.
 
 Use `finalize()` to inspect the completed file, or a custom `writePart()` to inspect pieces as they arrive. See the [file handling examples](docs/examples/file-handling.md).
 
-#### Use your own storage
+#### Connect your own storage
 
-You do not have to use `createStorageContainer()`. For object storage, custom paths, or another destination, provide your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions. See the [custom byte handler guide](docs/guides/custom-storage.md).
+Pass your storage functions directly to the router instead of passing `storage`. Your code controls where bytes go, how offsets are saved, and what happens when an upload completes. See the [custom byte handler guide](docs/guides/custom-storage.md).
 
 #### Protect public uploads
 
