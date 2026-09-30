@@ -165,35 +165,9 @@ Handle uploaded data directly with your own functions. `createUpload` can save a
 
 Pass these functions directly to the Express router, Fetch handler, or standalone upload service. The browser code stays the same. See [custom byte and completion handlers](docs/guides/custom-storage.md) for the complete setup, including using your own streams.
 
-### Customize how the browser sends files
+### Advanced networking
 
-Configure the HTTP layer separately when you need custom URLs, headers, authentication, or a partly customized transport:
-
-```js
-import { createHttpTransport, createUploadClient } from "@itsgravix/parcelweave";
-
-const transport = createHttpTransport({
-  endpoint: "https://uploads.example.com/v1",
-  credentials: "include",
-  headers: () => ({ Authorization: `Bearer ${getToken()}` }),
-});
-
-const uploads = createUploadClient({ transport, maxConcurrentRequests: 3 });
-```
-
-For a completely custom integration, provide five transport methods. No endpoint is involved:
-
-```js
-const uploads = createUploadClient({
-  transport: {
-    create: (specification, options) => myApi.create(specification, options),
-    batch: (pieces, options) => myApi.sendPieces(pieces, options),
-    status: (ids) => myApi.status(ids),
-    complete: (id) => myApi.complete(id),
-    remove: (id) => myApi.remove(id),
-  },
-});
-```
+Most applications should use `createHttpUploadClient()` from the quick start. If you need custom authentication, unusual routes, or networking other than the built-in HTTP setup, Parcelweave also lets you replace its transport layer. See the [custom transport guide](docs/guides/custom-transport.md).
 
 Choose the guide that matches your application:
 
