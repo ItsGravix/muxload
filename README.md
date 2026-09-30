@@ -60,6 +60,9 @@ import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 const app = express();
 app.use(express.json());
 
+// Your normal application routes can come before or after Parcelweave.
+app.get("/", (request, response) => response.send("Server is running"));
+
 // Parcelweave setup starts here. This local-disk adapter is optional.
 const storage = createLocalStorage({
   directory: "./uploads",
@@ -79,16 +82,9 @@ const storage = createLocalStorage({
   },
 });
 
-// Add the upload routes after middleware, but before any route that handles
-// all remaining requests.
+// Add this alongside your other API routes.
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 // Parcelweave setup ends here.
-
-// The rest of your normal Express routes.
-app.get("/", (request, response) => response.send("Server is running"));
-
-// Put your final "not found" handler after the upload routes.
-app.use((request, response) => response.status(404).send("Not found"));
 
 app.listen(3000, () => {
   console.log("Server listening on http://localhost:3000");
