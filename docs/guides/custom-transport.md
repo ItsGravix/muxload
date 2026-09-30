@@ -33,7 +33,7 @@ You can also replace only one part of the built-in HTTP behavior:
 ```js
 import { createHttpTransport, createUploadClient } from "@itsgravix/parcelweave";
 
-const http = createHttpTransport({ endpoint: "/api/parcelweave" });
+const http = createHttpTransport({ endpoint: "/api/uploads" });
 const uploads = createUploadClient({
   transport: { ...http, complete: (id) => myApi.publish(id) },
 });

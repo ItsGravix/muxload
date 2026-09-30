@@ -7,7 +7,7 @@ Supply functions directly to Parcelweave. You control what happens to each byte 
 ```js
 import { createExpressUploadRouter } from '@itsgravix/parcelweave/server';
 
-app.use('/api/parcelweave', createExpressUploadRouter({
+app.use('/api/uploads', createExpressUploadRouter({
   express,
   async createUpload(request, specification) {
     return yourUploads.start(specification);

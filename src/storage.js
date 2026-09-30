@@ -1,4 +1,5 @@
 import { mkdir, open, readFile, writeFile, rename, rm } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { UploadHttpError } from "./server.js";
@@ -48,7 +49,13 @@ export function createLocalStorage({ directory, validate, finalize, maxFileBytes
     },
     async completeUpload(context, upload) {
       if (upload.complete) return upload.result;
-      const result = await finalize?.(context, { ...upload, path: path.join(location(upload.id), "data") }) ?? { id: upload.id, complete: true };
+      const filePath = path.join(location(upload.id), "data");
+      const completedUpload = {
+        ...upload,
+        path: filePath,
+        createReadStream: (options) => createReadStream(filePath, options),
+      };
+      const result = await finalize?.(context, completedUpload) ?? { id: upload.id, complete: true };
       await save({ ...upload, complete: true, result });
       return result;
     },

@@ -19,7 +19,7 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.10.0
+npm install github:ItsGravix/parcelweave#v0.11.0
 ```
 
 ## Optional quick start: Express
@@ -43,7 +43,7 @@ const storage = createLocalStorage({
   directory: "./uploads", // Where files are saved on the server.
 });
 
-app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 // Parcelweave setup ends here.
 ```
 
@@ -51,9 +51,13 @@ Here is the same setup as a complete server:
 
 ```js
 import express from "express";
+import { createWriteStream } from "node:fs";
+import { rename } from "node:fs/promises";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 // Parcelweave imports.
-import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
+import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
 // Your normal Express setup.
@@ -64,17 +68,35 @@ app.use(express.json());
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3, // Optional: 2 GiB per file.
-  validate: async (request, file) => {
-    // Optional: inspect metadata or reject a file before receiving its bytes.
+  // Optional: remove validate() if you accept every file type.
+  validate: async (_request, file) => {
+    if (!file.name.toLowerCase().endsWith(".txt")) {
+      throw new UploadHttpError(415, "Only text files are allowed.");
+    }
   },
-  finalize: async (request, upload) => {
-    // Optional: upload.path is the completed file on disk.
-    return { id: upload.id, complete: true };
+  // Optional: finalize() runs after the complete file has been received.
+  finalize: async (_request, upload) => {
+    const processedPath = `${upload.path}.processed`;
+    await pipeline(
+      upload.createReadStream(),
+      // A small example transform: uppercase ASCII letters in each chunk.
+      new Transform({ transform(chunk, _encoding, done) {
+        for (let index = 0; index < chunk.length; index += 1) {
+          if (chunk[index] >= 97 && chunk[index] <= 122) chunk[index] -= 32;
+        }
+        done(null, chunk);
+      } }),
+      createWriteStream(processedPath),
+    );
+    await rename(processedPath, upload.path);
+
+    // This object is returned to uploads.upload() in the browser.
+    return { id: upload.id, name: upload.name, processed: true };
   },
 });
 
 // Mount this after middleware, but before catch-all and 404 routes.
-app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 // Parcelweave setup ends here.
 
 // The rest of your normal Express routes.
@@ -88,13 +110,13 @@ app.listen(3000, () => {
 });
 ```
 
-`directory` is required only when you choose `createLocalStorage()`. That adapter creates the directory when the first file arrives and stores completed bytes at `uploads/<upload-id>/data`. Its `maxFileBytes`, `validate`, and `finalize` options can be omitted.
+`directory` is required only when you choose `createLocalStorage()`. That adapter creates the directory when the first file arrives and writes incoming bytes to `uploads/<upload-id>/data`. The example `finalize()` reads and modifies the completed file through a backpressured Node pipeline, then atomically replaces the original. It never loads the whole file into memory. You can omit that hook to leave the file untouched. The adapter's `maxFileBytes` and `validate` options are also optional.
 
 Parcelweave itself does not require a directory, local disk, or this adapter. You can pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router instead. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
 
 The local storage adapter uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md).
 
-`app.use("/api/parcelweave", ...)` adds Parcelweave's upload routes at that URL.
+`app.use("/api/uploads", ...)` adds the upload routes at that URL. You may choose any path; use the same value in the browser client's `endpoint` option.
 
 ### 2. Send files from your browser
 
@@ -110,13 +132,14 @@ Put this in your frontend JavaScript, loaded after the input exists. The package
 import { createHttpUploadClient } from "@itsgravix/parcelweave";
 
 // Match the path in app.use() on your Express server.
-const uploads = createHttpUploadClient({ endpoint: "/api/parcelweave" });
+const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
 
 document.querySelector("#files").addEventListener("change", (event) => {
   for (const file of event.target.files) {
     uploads.upload(file, {
-      onProgress({ percentage }) {
-        console.log(`${file.name}: ${percentage}%`);
+      onProgress({ file: sourceFile, percentage }) {
+        // sourceFile is the same browser File or Blob passed to upload().
+        console.log(`${sourceFile.name}: ${percentage}%`);
       },
     }).then((result) => {
       console.log("Upload complete:", result);
@@ -126,6 +149,10 @@ document.querySelector("#files").addEventListener("change", (event) => {
   }
 });
 ```
+
+On the client, Parcelweave accepts the browser's native `File` or `Blob`. Your code keeps direct access to it, and `onProgress` receives it as `file`. You can read it with the browser's built-in `file.stream()` before or during the upload. Browser files are immutable; to change the uploaded bytes, create a new `File` or `Blob` and pass that value to `upload()`.
+
+On the backend, the local-disk adapter calls `finalize()` only after every byte has been received and confirmed. Its `upload.createReadStream()` opens a fresh Node readable stream for the completed server-side file. The stream is created only when called, reads bounded chunks with backpressure, and does not load the entire file into memory.
 
 `endpoint` tells the browser **where your server receives uploads**. It is the base URL for the routes you mounted above. If you change `app.use()` to `/files`, set `endpoint` to `/files` too. A relative URL uses the website's current origin; for a separate API server, use its full URL and configure CORS and authentication for that origin.
 

@@ -7,7 +7,7 @@ Start with the [Express quick start in the README](../../README.md#optional-quic
 Mount the router on your existing Express app:
 
 ```js
-app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 ```
 
 Then use the same path in your browser client. `endpoint` is the base URL of those server routes:
@@ -15,7 +15,7 @@ Then use the same path in your browser client. `endpoint` is the base URL of tho
 ```js
 import { createHttpUploadClient } from "@itsgravix/parcelweave";
 
-const uploads = createHttpUploadClient({ endpoint: "/api/parcelweave" });
+const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
 
 // file is a File from your page's file input.
 const result = await uploads.upload(file, {
@@ -36,25 +36,44 @@ Use your existing `app`. No login, user, or session is required for this local s
 
 ```js
 import express from "express";
-import { createExpressUploadRouter } from "@itsgravix/parcelweave/server";
+import { createWriteStream } from "node:fs";
+import { rename } from "node:fs/promises";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createExpressUploadRouter, UploadHttpError } from "@itsgravix/parcelweave/server";
 import { createLocalStorage } from "@itsgravix/parcelweave/storage";
 
 const storage = createLocalStorage({
   directory: "./uploads",
   maxFileBytes: 2 * 1024 ** 3,
-  validate: async (request, file) => {
-    // Optionally reject the file before accepting bytes.
+  validate: async (_request, file) => {
+    if (!file.name.toLowerCase().endsWith(".txt")) {
+      throw new UploadHttpError(415, "Only text files are allowed.");
+    }
   },
-  finalize: async (request, upload) => {
-    // upload.path is the completed temporary file.
-    return { id: upload.id, complete: true };
+  finalize: async (_request, upload) => {
+    const processedPath = `${upload.path}.processed`;
+    await pipeline(
+      upload.createReadStream(),
+      new Transform({ transform(chunk, _encoding, done) {
+        for (let index = 0; index < chunk.length; index += 1) {
+          if (chunk[index] >= 97 && chunk[index] <= 122) chunk[index] -= 32;
+        }
+        done(null, chunk);
+      } }),
+      createWriteStream(processedPath),
+    );
+    await rename(processedPath, upload.path);
+    return { id: upload.id, name: upload.name, processed: true };
   },
 });
 
-app.use("/api/parcelweave", createExpressUploadRouter({ express, storage }));
+app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 ```
 
-Files are saved as `uploads/<id>/data`; the original name stays in the upload record. Use one local-storage service instance per directory in a single Node.js process. For multiple server processes, use shared storage with atomic offset updates instead.
+Incoming files are saved as `uploads/<id>/data`. `finalize` runs only after the full file has arrived; `upload.createReadStream()` reads it with Node stream backpressure instead of buffering the full file. The original name stays in the upload record. Use one local-storage service instance per directory in a single Node.js process. For multiple server processes, use shared storage with atomic offset updates instead.
+
+The browser side still owns its original `File` or `Blob`; call its native `stream()` method when client code needs to inspect it. The backend stream is separate and reads the fully received server-side copy. Neither Parcelweave API eagerly duplicates the whole file in memory.
 
 Make `finalize` safe to call again: if a process stops after your work finishes but before the result is recorded, the operation can be retried. Also schedule cleanup for abandoned uploads.
 
