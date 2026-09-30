@@ -71,6 +71,6 @@ See the [file handling examples](../examples/file-handling.md) for reading and m
 
 ## If the first upload fails
 
-- **404:** Check that the browser endpoint reaches the Express mount path, and that the router is mounted before catch-all routes.
+- **404:** Check that the browser endpoint reaches the Express mount path. Add the upload router before your final 404 handler or any route that handles all remaining requests.
 - **CORS error:** If the browser and server have different origins, allow your frontend origin, the upload methods (`POST`, `GET`, `DELETE`), and required headers on the server. Cookie authentication across origins also needs the client's `credentials: "include"` setting and matching server CORS configuration.
 - **415:** Let the Parcelweave router parse its binary request bodies. Avoid earlier middleware that consumes all request bodies as JSON, text, or raw data.

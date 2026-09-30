@@ -79,14 +79,15 @@ const storage = createLocalStorage({
   },
 });
 
-// Mount this after middleware, but before catch-all and 404 routes.
+// Add the upload routes after middleware, but before any route that handles
+// all remaining requests.
 app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 // Parcelweave setup ends here.
 
 // The rest of your normal Express routes.
 app.get("/", (request, response) => response.send("Server is running"));
 
-// Catch-all routes belong after Parcelweave.
+// Put your final "not found" handler after the upload routes.
 app.use((request, response) => response.status(404).send("Not found"));
 
 app.listen(3000, () => {
