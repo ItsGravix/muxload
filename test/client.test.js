@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHttpUploadClient, createUploadClient } from "../src/client.js";
+import { createUploadClient } from "../src/client.js";
 
-test("the core client requires an explicit transport", () => {
-  assert.throws(() => createUploadClient(), /requires a transport/);
-  assert.throws(() => createHttpUploadClient(), /requires an endpoint/);
+test("the client requires an endpoint or request callbacks", () => {
+  assert.throws(() => createUploadClient(), /endpoint or request callbacks/);
+  assert.throws(() => createUploadClient({ endpoint: "" }), /non-empty endpoint/);
+});
+
+test("an endpoint can use a custom callback for one request", async () => {
+  const uploads = createUploadClient({
+    endpoint: "https://uploads.example/v1",
+    async createUpload() { return { id: "custom", offset: 0 }; },
+    async completeUpload(id) { return { id, complete: true }; },
+  });
+  assert.deepEqual(await uploads.upload(new Blob([])), { id: "custom", complete: true });
 });
 
 test("cancelling one file preserves the other file in a shared batch", async () => {
@@ -18,16 +27,14 @@ test("cancelling one file preserves the other file in a shared batch", async () 
   const client = createUploadClient({
     prepare: () => Promise.resolve(),
     onEvent(event) { if (event.type === "created") ids.push(event.id); },
-    transport: {
-      async create() { return { id: String(++sequence), offset: 0 }; },
-      async batch(entries) {
+    async createUpload() { return { id: String(++sequence), offset: 0 }; },
+    async sendParts(entries) {
         started(); await gate;
         return { offsets: Object.fromEntries(entries.map((entry) => [entry.id, entry.offset + entry.length])) };
-      },
-      async status() { return { offsets: {} }; },
-      async complete(id) { return { id }; },
-      async remove(id) { removed.push(id); },
     },
+    async getUploadStatus() { return { offsets: {} }; },
+    async completeUpload(id) { return { id }; },
+    async cancelUpload(id) { removed.push(id); },
   });
   const first = client.upload(new Blob(["one"]));
   const rejected = assert.rejects(first, { name: "AbortError" });
@@ -59,7 +66,7 @@ test("custom route functions work without changing the client", async () => {
   };
 
   try {
-    const uploads = createHttpUploadClient({
+    const uploads = createUploadClient({
       endpoint: "https://uploads.example/v1",
       routes: {
         create: "files/new",

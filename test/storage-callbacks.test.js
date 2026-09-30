@@ -5,10 +5,10 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { createUploadClient, UploadError } from "../src/client.js";
-import { createUploadService, createServiceTransport } from "../src/server.js";
+import { createUploadService, createServiceCallbacks } from "../src/server.js";
 import { createStorageContainer } from "../src/storage.js";
 
-test("endpoint-free transport resumes a committed batch after response loss and pauses independently", async () => {
+test("request callbacks resume a committed batch after response loss and pause independently", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "parcelweave-test-"));
   try {
     const finalizedReads = new Map();
@@ -29,20 +29,18 @@ test("endpoint-free transport resumes a committed batch after response loss and 
     });
     const service = createUploadService({ storage });
     let contextCalls = 0;
-    const direct = createServiceTransport(service, { context: () => { contextCalls++; return "owner"; } });
+    const direct = createServiceCallbacks(service, { context: () => { contextCalls++; return "owner"; } });
     let dropped = false;
     const events = [];
     const client = createUploadClient({
       retryDelays: [0],
       onEvent(event) { events.push(event); },
-      transport: {
-        ...direct,
-        async batch(entries, { onProgress }) {
-          const result = await direct.batch(entries, { onProgress });
+      ...direct,
+        async sendParts(entries, { onProgress }) {
+          const result = await direct.sendParts(entries, { onProgress });
           if (!dropped) { dropped = true; throw new UploadError("Lost reply", { retryable: true }); }
           return result;
         },
-      },
     });
     let pausedId;
     let paused = false;
@@ -68,10 +66,10 @@ test("endpoint-free transport resumes a committed batch after response loss and 
     assert.deepEqual(await service.status({ any: "context" }, [second.id]), { offsets: { [second.id]: 6 } });
     assert.deepEqual(await service.complete(undefined, result.id), result);
     assert.ok(contextCalls > 0);
-    await direct.remove(second.id);
-    await assert.rejects(direct.status([second.id]), { status: 404 });
+    await direct.cancelUpload(second.id);
+    await assert.rejects(direct.getUploadStatus([second.id]), { status: 404 });
     const controller = new AbortController();
     controller.abort();
-    await assert.rejects(direct.create({ name: "cancelled", size: 0, metadata: {} }, { signal: controller.signal }), { name: "AbortError" });
+    await assert.rejects(direct.createUpload({ name: "cancelled", size: 0, metadata: {} }, { signal: controller.signal }), { name: "AbortError" });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

@@ -1,25 +1,25 @@
 import { decodeBatch, encodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
 
-/** Connect a client directly to a service in the same process, without HTTP. */
-export function createServiceTransport(service, { context } = {}) {
+/** Create client request callbacks for a service in the same process. */
+export function createServiceCallbacks(service, { context } = {}) {
   for (const method of ["create", "batch", "status", "complete", "remove"]) {
     if (typeof service?.[method] !== "function") throw new TypeError(`service.${method} must be a function.`);
   }
   const getContext = () => typeof context === "function" ? context() : context;
   return {
-    async create(specification, { signal } = {}) {
+    async createUpload(specification, { signal } = {}) {
       signal?.throwIfAborted();
       return service.create(await getContext(), specification);
     },
-    async batch(pieces, { onProgress } = {}) {
+    async sendParts(pieces, { onProgress } = {}) {
       const encoded = encodeBatch(pieces);
       const result = await service.batch(await getContext(), await encoded.body.arrayBuffer());
       onProgress?.(encoded.payloadBytes);
       return result;
     },
-    async status(ids) { return service.status(await getContext(), ids); },
-    async complete(id) { return service.complete(await getContext(), id); },
-    async remove(id) { return service.remove(await getContext(), id); },
+    async getUploadStatus(ids) { return service.status(await getContext(), ids); },
+    async completeUpload(id) { return service.complete(await getContext(), id); },
+    async cancelUpload(id) { return service.remove(await getContext(), id); },
   };
 }
 

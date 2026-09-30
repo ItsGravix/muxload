@@ -4,12 +4,12 @@ Use this setup when you already have a router, cannot mount an Express router, o
 
 ## Browser routes
 
-Keep HTTP configuration in the transport and scheduling configuration in the client:
+Give the upload client your endpoint and any route names that differ from Parcelweave's defaults:
 
 ```js
-import { createHttpTransport, createUploadClient } from "@itsgravix/parcelweave";
+import { createUploadClient } from "@itsgravix/parcelweave";
 
-const transport = createHttpTransport({
+const uploads = createUploadClient({
   endpoint: "/api",
   routes: {
     create: "files/new",
@@ -19,8 +19,6 @@ const transport = createHttpTransport({
     remove: (id) => `files/${encodeURIComponent(id)}`,
   },
 });
-
-const uploads = createUploadClient({ transport });
 ```
 
 Route values may be full URLs, so individual operations can live on different services.

@@ -104,9 +104,9 @@ function retryDelay(attempt, delays) {
 
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export function createHttpTransport(options = {}) {
+function createHttpCallbacks(options = {}) {
   if (typeof options.endpoint !== "string" || !options.endpoint.trim()) {
-    throw new TypeError("createHttpTransport() requires an endpoint.");
+    throw new TypeError("createUploadClient() requires a non-empty endpoint.");
   }
   const endpoint = options.endpoint.replace(/\/$/, "");
   const configuredRoutes = options.routes ?? {};
@@ -139,23 +139,27 @@ export function createHttpTransport(options = {}) {
     }
   };
   return {
-    create: (spec, { signal } = {}) => json("POST", "create", null, spec, signal),
-    async batch(entries, { onProgress }) {
+    createUpload: (spec, { signal } = {}) => json("POST", "create", null, spec, signal),
+    async sendParts(entries, { onProgress }) {
       return xhrBatch(route("batch"), encodeBatch(entries), { onProgress, headers: await headers(), credentials: options.credentials, bodyStallMs: options.bodyStallMs ?? 600_000, responseStallMs });
     },
-    status: (ids) => json("GET", "status", ids),
-    complete: (id) => json("POST", "complete", id, {}),
-    remove: (id) => json("DELETE", "remove", id),
+    getUploadStatus: (ids) => json("GET", "status", ids),
+    completeUpload: (id) => json("POST", "complete", id, {}),
+    cancelUpload: (id) => json("DELETE", "remove", id),
   };
 }
 
 export function createUploadClient(options = {}) {
-  const transport = options.transport;
-  if (!transport) {
-    throw new TypeError("createUploadClient() requires a transport. Use createHttpUploadClient() for HTTP uploads.");
+  const callbackNames = ["createUpload", "sendParts", "getUploadStatus", "completeUpload", "cancelUpload"];
+  const usesEndpoint = options.endpoint !== undefined;
+  const callbacks = usesEndpoint
+    ? { ...createHttpCallbacks(options), ...Object.fromEntries(callbackNames.filter((name) => options[name] !== undefined).map((name) => [name, options[name]])) }
+    : options;
+  if (!usesEndpoint && !callbackNames.some((name) => options[name] !== undefined)) {
+    throw new TypeError("createUploadClient() requires an endpoint or request callbacks.");
   }
-  for (const method of ["create", "batch", "status", "complete", "remove"]) {
-    if (typeof transport[method] !== "function") throw new TypeError(`transport.${method} must be a function.`);
+  for (const name of callbackNames) {
+    if (typeof callbacks[name] !== "function") throw new TypeError(`${name} must be a function.`);
   }
   const event = (type, record, extra = {}) => { try { options.onEvent?.({ type, id: record?.id, ...extra }); } catch {} };
   const minBatchBytes = clampInteger(options.minBatchBytes ?? 128 * KiB, 16 * KiB, 100 * MiB, "minBatchBytes");
@@ -235,7 +239,7 @@ export function createUploadClient(options = {}) {
   const reconcile = async (entries) => {
     const ids = entries.map((entry) => entry.id);
     try {
-      const payload = await transport.status(ids);
+      const payload = await callbacks.getUploadStatus(ids);
       for (const entry of entries) {
         const confirmed = payload.offsets?.[entry.id];
         if (Number.isSafeInteger(confirmed) && confirmed >= entry.record.offset && confirmed <= entry.record.size) {
@@ -254,7 +258,7 @@ export function createUploadClient(options = {}) {
     record.finishing = true;
     for (let attempt = 0; !record.cancelled; attempt += 1) {
       try {
-        const result = await transport.complete(record.id);
+        const result = await callbacks.completeUpload(record.id);
         if (record.cancelled) return;
         record.settled = true;
         record.finishing = false;
@@ -292,7 +296,7 @@ export function createUploadClient(options = {}) {
     const startedAt = performance.now();
     let succeeded = false;
     try {
-      const result = await transport.batch(entries.map(({ id, offset, length, blob }) => ({ id, offset, length, blob })), {
+      const result = await callbacks.sendParts(entries.map(({ id, offset, length, blob }) => ({ id, offset, length, blob })), {
         onProgress: (loaded) => distributeProgress(entries, loaded),
       });
       for (const entry of entries) {
@@ -356,7 +360,7 @@ export function createUploadClient(options = {}) {
     if (record.removing || record.settled || record.inFlight) return;
     record.removing = true;
     try {
-      if (record.id) await transport.remove(record.id);
+      if (record.id) await callbacks.cancelUpload(record.id);
     } catch {
       // Cancellation is local-first. Server cleanup may also expire abandoned sessions.
     } finally {
@@ -392,7 +396,7 @@ export function createUploadClient(options = {}) {
 
     try {
       await prepare();
-      const created = await transport.create({
+      const created = await callbacks.createUpload({
           name: file.name || "upload.bin",
           size: file.size,
           type: file.type || "application/octet-stream",
@@ -447,8 +451,4 @@ export function createUploadClient(options = {}) {
       };
     },
   };
-}
-
-export function createHttpUploadClient(options = {}) {
-  return createUploadClient({ ...options, transport: createHttpTransport(options) });
 }

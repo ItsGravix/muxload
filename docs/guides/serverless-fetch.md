@@ -26,9 +26,9 @@ Your platform invokes the handler. Parcelweave does not listen on a port or host
 The browser can use the easy HTTP client:
 
 ```js
-import { createHttpUploadClient } from "@itsgravix/parcelweave";
+import { createUploadClient } from "@itsgravix/parcelweave";
 
-const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
+const uploads = createUploadClient({ endpoint: "/api/uploads" });
 ```
 
 Do not keep upload records or offsets only in an in-memory `Map`. Separate requests may run on different machines. Store bytes and records in durable storage, and protect offset updates with a transaction, conditional write, or another atomic mechanism.

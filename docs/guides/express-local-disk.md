@@ -13,9 +13,9 @@ app.use("/api/uploads", createExpressUploadRouter({ express, storage }));
 Then use the same path in your browser client. `endpoint` is the base URL of those server routes:
 
 ```js
-import { createHttpUploadClient } from "@itsgravix/parcelweave";
+import { createUploadClient } from "@itsgravix/parcelweave";
 
-const uploads = createHttpUploadClient({ endpoint: "/api/uploads" });
+const uploads = createUploadClient({ endpoint: "/api/uploads" });
 
 // file is a File from your page's file input.
 const result = await uploads.upload(file, {
