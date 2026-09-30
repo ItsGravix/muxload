@@ -1,4 +1,27 @@
-import { decodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
+import { decodeBatch, encodeBatch, BATCH_CONTENT_TYPE, normalizeUploadId } from "./protocol.js";
+
+/** Connect a client directly to a service in the same process, without HTTP. */
+export function createServiceTransport(service, { context } = {}) {
+  for (const method of ["create", "batch", "status", "complete", "remove"]) {
+    if (typeof service?.[method] !== "function") throw new TypeError(`service.${method} must be a function.`);
+  }
+  const getContext = () => typeof context === "function" ? context() : context;
+  return {
+    async create(specification, { signal } = {}) {
+      signal?.throwIfAborted();
+      return service.create(await getContext(), specification);
+    },
+    async batch(pieces, { onProgress } = {}) {
+      const encoded = encodeBatch(pieces);
+      const result = await service.batch(await getContext(), await encoded.body.arrayBuffer());
+      onProgress?.(encoded.payloadBytes);
+      return result;
+    },
+    async status(ids) { return service.status(await getContext(), ids); },
+    async complete(id) { return service.complete(await getContext(), id); },
+    async remove(id) { return service.remove(await getContext(), id); },
+  };
+}
 
 const CREATE_BODY_LIMIT = 32 * 1024;
 const MAX_BATCH_BYTES_LIMIT = 100 * 1024 * 1024;

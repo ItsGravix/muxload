@@ -19,7 +19,7 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.13.1
+npm install github:ItsGravix/parcelweave#v0.14.0
 ```
 
 ## Optional quick start: Express
@@ -167,7 +167,7 @@ Pass these functions directly to the Express router, Fetch handler, or standalon
 
 ### Advanced networking
 
-Most applications should use `createHttpUploadClient()` from the quick start. If you need custom authentication, unusual routes, or networking other than the built-in HTTP setup, Parcelweave also lets you replace its transport layer. See the [custom transport guide](docs/guides/custom-transport.md).
+Use `createHttpUploadClient()` from the quick start for HTTP uploads. It accepts custom headers and route names. For replacing one operation, connecting directly to a service in Node.js, or using your own networking, see [customize how uploads are sent](docs/guides/custom-transport.md).
 
 Choose the guide that matches your application:
 
