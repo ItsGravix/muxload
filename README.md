@@ -19,12 +19,12 @@ npm install github:ItsGravix/parcelweave
 Pin a release in production:
 
 ```bash
-npm install github:ItsGravix/parcelweave#v0.17.0
+npm install github:ItsGravix/parcelweave#v0.18.0
 ```
 
 ## Optional quick start: Express
 
-Express is optional. This example adds uploads to an Express server; see the [Fetch guide](docs/guides/serverless-fetch.md) for other frameworks.
+Express is optional. This example adds uploads to an Express server. For another backend, use [one request handler](docs/guides/any-backend.md) with your framework or Node's built-in HTTP server.
 
 ### 1. Server
 
@@ -89,7 +89,7 @@ For a separate upload server, use its full URL as `endpoint` and configure CORS 
 - [Use your own storage](docs/guides/custom-storage.md): decide where bytes go and what happens when a file finishes.
 - [Validate or process files](docs/guides/express-local-disk.md): optional checks before upload and processing after it completes.
 - [Read or modify file contents](docs/examples/file-handling.md): small examples using streams.
-- [Use another framework](docs/guides/serverless-fetch.md): connect a standard Request/Response handler.
+- [Use another backend](docs/guides/any-backend.md): one handler for standard requests, custom framework request objects, or plain Node.js.
 - [Integrate your own router](docs/reference/upload-service.md): low-level operations for a fully custom server.
 
 ## What Parcelweave handles
@@ -111,7 +111,8 @@ Create one client and reuse it for every file. Every `upload()` call joins the s
 | --- | --- |
 | `createUploadClient({ endpoint, ...options })` | Upload files from the browser. Parcelweave handles the HTTP requests. |
 | `createExpressUploadRouter(options)` | You want ready-made routes inside an existing Express app. |
-| `createFetchUploadHandler(options)` | Your runtime uses web-standard `Request` and `Response`. |
+| `createUploadHandler(options)` | Pass a request from your backend and receive a standard `Response`. |
+| `createNodeUploadHandler(options)` | Connect Node's HTTP request/response objects directly (import from `/node`). |
 | `createUploadService(options)` | You want to connect the protocol engine to your own router. |
 
 ## Before production

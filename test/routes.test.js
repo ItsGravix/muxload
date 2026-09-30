@@ -2,13 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { once } from "node:events";
+import { createServer } from "node:http";
+import { createNodeUploadHandler } from "../src/node.js";
 import { createUploadClient } from "../src/client.js";
 import { createExpressUploadRouter, createFetchUploadHandler, UploadHttpError } from "../src/server.js";
 import { uploadRoutes } from "../src/routes.js";
 
 const routes = { create: "start", batch: "pieces", status: "progress", complete: ":id/finish", remove: ":id" };
 
-for (const framework of ["Express", "Fetch"]) {
+for (const framework of ["Express", "Fetch", "Node", "Request object"]) {
   test(`${framework}: shared route paths support upload, lost replies, pause, resume and cancellation`, async (t) => {
     const records = new Map();
     const storage = {
@@ -37,9 +39,26 @@ for (const framework of ["Express", "Fetch"]) {
       endpoint = `http://127.0.0.1:${server.address().port}/files`;
       dispatch = nativeFetch;
       t.after(() => { server.closeAllConnections(); server.close(); });
+    } else if (framework === "Node") {
+      const handle = createNodeUploadHandler({ basePath: "/files", storage, routes });
+      const server = createServer(async (request, response) => {
+        if (await handle(request, response)) return;
+        response.end("Other application route");
+      }).listen(0);
+      await once(server, "listening");
+      endpoint = `http://127.0.0.1:${server.address().port}/files`;
+      dispatch = nativeFetch;
+      t.after(() => { server.closeAllConnections(); server.close(); });
+      assert.equal(await (await dispatch(endpoint.replace("/files", "/other"))).text(), "Other application route");
     } else {
       const handle = createFetchUploadHandler({ basePath: "/files", storage, routes });
-      dispatch = (url, options) => handle(new Request(url, options));
+      dispatch = (url, options) => {
+        const request = new Request(url, options);
+        return handle(framework === "Request object" ? {
+          url: new URL(url).pathname + new URL(url).search,
+          method: request.method, headers: request.headers, body: request.body,
+        } : request);
+      };
       assert.equal((await dispatch("http://example.test/start", { method: "POST" })).status, 404);
     }
     const seen = [];

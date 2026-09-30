@@ -1,6 +1,6 @@
 # Connect a router directly
 
-Use `createUploadService({ storage })` only when your framework cannot use the Express router or Fetch handler. Create one service when your server starts and reuse it across requests so its per-file locks are shared.
+Usually, [createUploadHandler()](../guides/any-backend.md) handles the request for you, including frameworks with their own request objects. Use `createUploadService({ storage })` when you specifically want to manage the HTTP parsing and responses yourself. Create one service when your server starts and reuse it across requests so its per-file locks are shared.
 
 The service receives parsed values and returns results. Your router handles HTTP:
 

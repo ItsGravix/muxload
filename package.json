@@ -1,6 +1,6 @@
 {
   "name": "@itsgravix/parcelweave",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Resumable JavaScript uploads for large files, slow connections, and CDN or server request-body limits, with retries and real progress.",
   "type": "module",
   "license": "MIT",
@@ -9,6 +9,7 @@
     ".": "./src/client.js",
     "./client": "./src/client.js",
     "./server": "./src/server.js",
+    "./node": "./src/node.js",
     "./protocol": "./src/protocol.js",
     "./storage": "./src/storage.js"
   },
@@ -21,7 +22,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/client.js && node --check src/server.js && node --check src/protocol.js && node --check src/storage.js"
+    "check": "node --check src/client.js && node --check src/server.js && node --check src/protocol.js && node --check src/storage.js && node --check src/node.js && node --check src/routes.js"
   },
   "engines": {
     "node": ">=20"

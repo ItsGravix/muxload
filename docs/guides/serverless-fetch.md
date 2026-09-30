@@ -1,17 +1,14 @@
 # Serverless and Fetch runtimes
 
-Use the Fetch handler in Workers, serverless functions, or frameworks built around standard `Request` and `Response` objects.
+Use the shared upload handler in Workers, serverless functions, or frameworks built around standard `Request` and `Response` objects. For other request formats or plain Node.js, see [backend integration](any-backend.md).
 
 ```js
-import { createFetchUploadHandler } from "@itsgravix/parcelweave/server";
+import { createUploadHandler } from "@itsgravix/parcelweave/server";
+import { storage } from "./upload-storage.js";
 
-const handleUpload = createFetchUploadHandler({
+const handleUpload = createUploadHandler({
   basePath: "/api/uploads",
-  createUpload,
-  resolveUpload,
-  writePart,
-  completeUpload,
-  removeUpload,
+  storage,
 });
 
 export default {
@@ -22,6 +19,8 @@ export default {
 ```
 
 Your platform invokes the handler. Parcelweave does not listen on a port or host a web server.
+
+`upload-storage.js` is your application's [storage implementation](custom-storage.md). It exports the functions that save bytes and upload records in your chosen destination. The handler also accepts the shared `routes` option for [custom URLs](custom-router.md).
 
 The browser can use the easy HTTP client:
 

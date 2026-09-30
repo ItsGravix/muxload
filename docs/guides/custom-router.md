@@ -55,7 +55,7 @@ You can change just one path, such as `{ batch: "pieces" }`; the rest keep their
 
 ## Using another framework
 
-If your framework uses standard `Request` and `Response` objects, use `createFetchUploadHandler({ basePath: "/files", storage, routes })`. See the [Fetch setup](serverless-fetch.md). It accepts the same route settings and does not start a server.
+Use `createUploadHandler({ basePath: "/files", storage, routes })` with your framework. It accepts the same route settings and handles requests without Express. See [other backend setups](any-backend.md), including plain Node.js and frameworks with their own request objects.
 
 For a router that cannot use either handler, `createUploadService()` exposes the underlying operations. That is an advanced integration: your router must parse bounded request bodies and send HTTP responses. See the [service reference](../reference/upload-service.md).
 

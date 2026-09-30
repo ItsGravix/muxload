@@ -230,7 +230,7 @@ async function readJson(request, maximumBytes) {
  * Portable Request -> Response handler for Workers, serverless runtimes and
  * frameworks that use the Web Fetch API.
  */
-export function createFetchUploadHandler(options) {
+export function createUploadHandler(options) {
   const service = createUploadService(options);
   const routes = uploadRoutes(options.routes);
   const basePath = `/${String(options.basePath ?? "").replace(/^\/+|\/+$/g, "")}`.replace(/^\/$/, "");
@@ -238,6 +238,13 @@ export function createFetchUploadHandler(options) {
 
   return async function handleUpload(request, context = request) {
     try {
+      // Frameworks can pass a Web Request or an object with the raw request body.
+      if (!(request instanceof Request)) {
+        const { url, method = "GET", headers, body } = request;
+        request = new Request(new URL(url, "http://parcelweave.internal"), {
+          method, headers, body, ...(body == null ? {} : { duplex: "half" }),
+        });
+      }
       const url = new URL(request.url);
       if (basePath && url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
         return jsonResponse({ error: "Parcelweave route not found." }, 404, responseHeaders);
@@ -280,6 +287,9 @@ export function createFetchUploadHandler(options) {
     }
   };
 }
+
+// Existing Fetch integrations use the same framework-independent handler.
+export const createFetchUploadHandler = createUploadHandler;
 
 /** Thin compatibility adapter for Express applications. */
 export function createExpressUploadRouter(options) {

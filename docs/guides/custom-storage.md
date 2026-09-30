@@ -35,7 +35,7 @@ app.use('/api/uploads', createExpressUploadRouter({
 }));
 ```
 
-`yourUploads` stands for your own functions or service. Replace those calls with your implementation. The same five functions work with `createFetchUploadHandler` and `createUploadService`; you can also group them into a `storage` object for reuse. Parcelweave has no user or authentication concept. If your application needs access control, use the supplied `context` inside these functions and implement your own checks.
+`yourUploads` stands for your own functions or service. Replace those calls with your implementation. The same five functions work with `createUploadHandler`, `createNodeUploadHandler`, and `createUploadService`; you can also group them into a `storage` object for reuse. Parcelweave has no user or authentication concept. If your application needs access control, use the supplied `context` inside these functions and implement your own checks.
 
 ## What each function receives and returns
 
