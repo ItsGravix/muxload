@@ -91,19 +91,31 @@ app.listen(3000, () => {
 });
 ```
 
-Folder creation is an optional feature provided by `createStorageContainer()`. Give it one base directory, such as `./uploads`, and it creates that directory when the first upload starts. Each upload is stored as one file named with its random upload ID. Parcelweave does not place metadata or JSON sidecar files in that folder. The `validate` and `finalize` options are optional.
+#### Where files are saved
 
-The simple adapter keeps offsets and upload metadata in memory, separately from the files. It resumes interrupted requests while the server process is running. If uploads must also resume after a server restart, provide the optional `state` adapter backed by your database or cache. Applications with their own storage can skip `createStorageContainer()` entirely and implement the five storage callbacks described below.
+`createStorageContainer()` creates the chosen directory when the first upload starts. Each upload is one file named with a random upload ID. It does not add metadata or JSON sidecar files to the folder.
 
-`validate(request, uploadInfo)` runs once when the browser asks to start an upload—before the upload directory is created and before Parcelweave accepts the first byte. `uploadInfo` contains the client-declared `name`, `size`, and `metadata`, so this hook is useful for limits, permissions, and preliminary checks. It does not receive file contents. Inspect actual bytes in `finalize()` after the complete file arrives, or provide a custom `writePart()` if you need incremental inspection while pieces arrive.
+#### How resume state works
 
-Use `createStorageContainer()` when this folder-based storage fits your application. If you want object storage, a different filesystem layout, or another destination, skip it and pass your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions to the router. See the [custom byte handler guide](docs/guides/custom-storage.md) for a complete example.
+The simple adapter keeps offsets and metadata in memory. Interrupted uploads can resume while the server is running. To resume after a server restart, provide a `state` adapter backed by your database or cache.
 
-The storage container uses random upload IDs and accepts requests that know the corresponding ID. If your server is public or multi-user, implement authorization in custom callbacks as shown in the [custom byte handler guide](docs/guides/custom-storage.md). Treat upload IDs as identifiers, not as authentication.
+#### When validation runs
 
-`app.use("/api/uploads", ...)` adds the upload routes at that URL. You may choose any path; use the same value in the browser client's `endpoint` option.
+`validate(request, uploadInfo)` runs before the file is created or any bytes are accepted. It receives the client-declared `name`, `size`, and `metadata`, but not the file contents.
 
-For reading or changing file contents, see the [file handling examples](docs/examples/file-handling.md).
+Use `finalize()` to inspect the completed file, or a custom `writePart()` to inspect pieces as they arrive. See the [file handling examples](docs/examples/file-handling.md).
+
+#### Use your own storage
+
+You do not have to use `createStorageContainer()`. For object storage, custom paths, or another destination, provide your own `createUpload`, `resolveUpload`, `writePart`, `completeUpload`, and `removeUpload` functions. See the [custom byte handler guide](docs/guides/custom-storage.md).
+
+#### Protect public uploads
+
+Upload IDs identify uploads; they are not authentication. Public or multi-user applications should check authorization in their custom callbacks.
+
+#### Match the browser endpoint
+
+`app.use("/api/uploads", ...)` mounts the server routes at `/api/uploads`. Use that same path for the browser client's `endpoint`. You may replace it with any URL you choose.
 
 ### 2. Send files from your browser
 
