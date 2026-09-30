@@ -2,6 +2,12 @@
 
 Supply functions directly to Parcelweave. You control what happens to each byte range and to the completed file; no folder, memory adapter, or Parcelweave storage implementation is required.
 
+## What these functions change
+
+Think of these functions as a storage extension. They connect your own filesystem, object storage, database, or service to Parcelweave. They do **not** replace Parcelweave's multiplexing, fair scheduling, concurrency, retries, resume logic, progress reporting, pause controls, or protocol validation.
+
+They are active storage operations, not notification events. The most important rule is that `writePart()` should finish only after your destination has accepted the bytes, and `resolveUpload()` should return the latest confirmed offset. Parcelweave uses that offset to resume safely without restarting the file.
+
 ## Express example
 
 ```js
